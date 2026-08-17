@@ -1,20 +1,8 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script>
-      // Prevent "Cannot set property fetch" errors if old polyfills are stuck in cache
-      (function() {
-        var desc = Object.getOwnPropertyDescriptor(window, 'fetch');
-        if (desc && !desc.set && desc.configurable) {
-          Object.defineProperty(window, 'fetch', {
-            get: desc.get,
-            set: function() { console.warn('Fetch override blocked by applet.'); },
-            configurable: true,
-            enumerable: desc.enumerable
-          });
-        }
-      })();
-    </script>
+    <script type="module" src="/@vite/client"></script>
+
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My Google AI Studio App</title>
@@ -26,7 +14,7 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.entry.tsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
 

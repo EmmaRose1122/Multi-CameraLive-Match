@@ -71,8 +71,16 @@ export class FootballMatchSimulator {
     if (this.animFrameId) return;
 
     const renderLoop = () => {
-      this.updatePhysics();
-      this.renderAllAngles();
+      // OVERRIDE: Empty canvas to make it blank as requested
+      this.ctxMap.forEach((ctx, id) => {
+         const canvas = this.canvasMap.get(id);
+         if(canvas) {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+         }
+      });
+      // this.updatePhysics();
+      // this.renderAllAngles();
       this.animFrameId = requestAnimationFrame(renderLoop);
     };
     this.animFrameId = requestAnimationFrame(renderLoop);

@@ -55,7 +55,11 @@ export default function App() {
     stoppageMinutes: 2,
     showScoreboard: true,
     showClock: true,
-    showLowerThird: true,
+    showLowerThird: false,
+    customLowerThird: {
+      title: 'LIVE MATCH COVERAGE',
+      subtitle: 'Commentary: John Smith & Sarah Jones',
+    },
     activeBanner: null,
     theme: 'premier',
     stationName: 'FOOTBALL LIVE HD',

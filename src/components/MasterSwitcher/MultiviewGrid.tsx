@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { CameraNode, SwitcherState } from '../../types/broadcast';
 import { matchSimulator } from '../../services/simulationData';
+import { BroadcastAudioMeter } from './BroadcastAudioMeter';
 
 interface MultiviewGridProps {
   cameras: CameraNode[];
@@ -295,16 +296,8 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
                   </div>
                 )}
 
-                {/* Simulated Audio Peak Meter (Right Bar) */}
-                <div className="absolute right-2 bottom-3 top-3 w-1.5 bg-black/60 rounded-full overflow-hidden flex flex-col-reverse p-0.5 border border-white/10">
-                  <div
-                    className="w-full rounded-full transition-all duration-75"
-                    style={{
-                      height: `${Math.min(100, Math.max(20, cam.audioLevel || 45 + Math.sin(Date.now() / 200 + idx) * 35))}%`,
-                      backgroundColor: isPgm ? '#ef4444' : isPip ? '#3b82f6' : '#22c55e',
-                    }}
-                  />
-                </div>
+                {/* Real-time Decibel Audio Peak Meter */}
+                <BroadcastAudioMeter cameraId={cam.id} />
 
                 {/* Overlaid Telemetry Capsule (Battery / Temp / Latency) */}
                 <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-white/80 font-mono border border-white/10">

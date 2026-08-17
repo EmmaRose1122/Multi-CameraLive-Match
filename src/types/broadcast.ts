@@ -60,6 +60,10 @@ export interface ScoreboardState {
   showScoreboard: boolean;
   showClock: boolean;
   showLowerThird: boolean;
+  customLowerThird: {
+    title: string;
+    subtitle: string;
+  };
   activeBanner: {
     id: string;
     type: string;
