@@ -170,182 +170,107 @@ export class GraphicsCompositor {
     const sec = sb.matchSeconds % 60;
     const timeStr = `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
 
-    const x = 32;
-    const y = 32;
+    const x = 40;
+    const y = 40;
+    const rowH = 32;
+    const nameW = 220;
+    const scoreW = 40;
+    const totalW = nameW + scoreW;
 
     if (sb.theme === 'premier') {
-      // Premier League Style (Deep Purple & Vibrant Cyan)
+      // Background
       ctx.fillStyle = '#240046';
       ctx.beginPath();
-      ctx.roundRect(x, y, 320, 38, 4);
+      // Use standard roundRect
+      ctx.roundRect(x, y, totalW, rowH * 2 + 28, 4);
       ctx.fill();
 
-      // Home Team color block
+      // Home Team row
       ctx.fillStyle = sb.homeTeam.primaryColor;
-      ctx.fillRect(x + 4, y + 4, 6, 30);
-
-      // Home short & score
+      ctx.fillRect(x + 4, y + 4, 6, 24);
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 15px sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText(sb.homeTeam.shortName, x + 16, y + 24);
+      ctx.fillText(sb.homeTeam.name.toUpperCase(), x + 16, y + 22);
+      
+      ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
-      ctx.fillText(`${sb.homeTeam.score}`, x + 72, y + 24);
+      ctx.fillText(`${sb.homeTeam.score}`, x + nameW + scoreW / 2, y + 22);
 
       // Divider
       ctx.fillStyle = '#4c1d95';
-      ctx.fillRect(x + 88, y + 6, 2, 26);
+      ctx.fillRect(x + 8, y + rowH, totalW - 16, 1);
 
-      // Away Score & short
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(`${sb.awayTeam.score}`, x + 104, y + 24);
-      ctx.textAlign = 'left';
-      ctx.fillText(sb.awayTeam.shortName, x + 122, y + 24);
-
-      // Away color block
+      // Away Team row
       ctx.fillStyle = sb.awayTeam.primaryColor;
-      ctx.fillRect(x + 165, y + 4, 6, 30);
+      ctx.fillRect(x + 4, y + rowH + 4, 6, 24);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.fillText(sb.awayTeam.name.toUpperCase(), x + 16, y + rowH + 22);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${sb.awayTeam.score}`, x + nameW + scoreW / 2, y + rowH + 22);
 
-      // Clock Block (Vibrant Cyan)
+      // Clock Block (Cyan)
       ctx.fillStyle = '#06b6d4';
       ctx.beginPath();
-      ctx.roundRect(x + 180, y + 4, 134, 30, 3);
+      ctx.roundRect(x, y + rowH * 2, totalW, 28, [0, 0, 4, 4]);
       ctx.fill();
 
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 13px monospace';
       ctx.textAlign = 'center';
       let clockDisplay = `${sb.period}  ${timeStr}`;
-      if (sb.stoppageMinutes > 0) {
-        clockDisplay += ` +${sb.stoppageMinutes}`;
-      }
-      ctx.fillText(clockDisplay, x + 247, y + 23);
+      if (sb.stoppageMinutes > 0) clockDisplay += ` +${sb.stoppageMinutes}`;
+      ctx.fillText(clockDisplay, x + totalW / 2, y + rowH * 2 + 19);
+
     } else if (sb.theme === 'champions') {
-      // UEFA Champions League Midnight Blue & Gold
+      // Background
       ctx.fillStyle = 'rgba(10, 25, 47, 0.95)';
       ctx.beginPath();
-      ctx.roundRect(x, y, 340, 40, 6);
+      ctx.roundRect(x, y, totalW, rowH * 2 + 30, 6);
       ctx.fill();
       ctx.strokeStyle = '#d4af37';
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      // Home
+      // Home Team row
+      ctx.fillStyle = sb.homeTeam.primaryColor;
+      ctx.fillRect(x + 6, y + 6, 4, 20);
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 14px sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText(sb.homeTeam.shortName, x + 16, y + 25);
+      ctx.fillText(sb.homeTeam.name.toUpperCase(), x + 18, y + 21);
+      
       ctx.fillStyle = '#fbbf24';
-      ctx.fillText(`${sb.homeTeam.score}`, x + 75, y + 25);
-
-      // VS Gold Star
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText('-', x + 96, y + 25);
-
-      // Away
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillText(`${sb.awayTeam.score}`, x + 112, y + 25);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(sb.awayTeam.shortName, x + 132, y + 25);
-
-      // Clock Tag
-      ctx.fillStyle = 'rgba(212, 175, 55, 0.2)';
-      ctx.fillRect(x + 190, y + 6, 140, 28);
-      ctx.fillStyle = '#fef08a';
-      ctx.font = 'bold 13px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`${sb.period}  ${timeStr} ${sb.stoppageMinutes ? '+' + sb.stoppageMinutes : ''}`, x + 260, y + 24);
-    } else {
-      // Modern High-Contrast Broadcast Dark
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      ctx.fillText(`${sb.homeTeam.score}`, x + nameW + scoreW / 2, y + 21);
+
+      // Away Team row
+      ctx.fillStyle = sb.awayTeam.primaryColor;
+      ctx.fillRect(x + 6, y + rowH + 6, 4, 20);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.fillText(sb.awayTeam.name.toUpperCase(), x + 18, y + rowH + 21);
+      
+      ctx.fillStyle = '#fbbf24';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${sb.awayTeam.score}`, x + nameW + scoreW / 2, y + rowH + 21);
+
+      // Clock Block
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
       ctx.beginPath();
-      ctx.roundRect(x, y, 330, 38, 6);
+      ctx.roundRect(x + 2, y + rowH * 2 + 2, totalW - 4, 26, [0, 0, 4, 4]);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
 
-      // Home
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 14px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(sb.homeTeam.shortName, x + 16, y + 24);
-      ctx.fillStyle = '#38bdf8';
-      ctx.fillText(`${sb.homeTeam.score}`, x + 72, y + 24);
-
-      ctx.fillStyle = '#64748b';
-      ctx.fillRect(x + 92, y + 6, 2, 26);
-
-      // Away
-      ctx.fillStyle = '#38bdf8';
-      ctx.fillText(`${sb.awayTeam.score}`, x + 104, y + 24);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(sb.awayTeam.shortName, x + 124, y + 24);
-
-      // Clock
-      ctx.fillStyle = '#0284c7';
-      ctx.fillRect(x + 185, y + 4, 138, 30);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 13px monospace';
+      ctx.font = 'bold 12px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`${sb.period} ${timeStr} ${sb.stoppageMinutes ? '+' + sb.stoppageMinutes : ''}`, x + 254, y + 23);
+      let clockDisplay = `${sb.period}  ${timeStr}`;
+      if (sb.stoppageMinutes > 0) clockDisplay += ` +${sb.stoppageMinutes}`;
+      ctx.fillText(clockDisplay, x + totalW / 2, y + rowH * 2 + 19);
     }
-  }
-
-  public drawCustomLowerThird(
-    ctx: CanvasRenderingContext2D,
-    w: number,
-    h: number,
-    lt: { title: string; subtitle: string },
-    theme: string
-  ) {
-    const marginX = w * 0.08;
-    const marginY = h - 70;
-    
-    // Determine colors based on theme
-    const primaryBg = theme === 'modern-dark' ? 'rgba(11, 13, 17, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-    const primaryText = theme === 'modern-dark' ? '#ffffff' : '#0f172a';
-    const accentBg = theme === 'premier' ? '#38bdf8' : theme === 'champions' ? '#1d4ed8' : '#eab308';
-    const accentText = '#ffffff';
-
-    ctx.save();
-    
-    // Base shadow
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-    ctx.shadowBlur = 12;
-    ctx.shadowOffsetY = 4;
-
-    // Main Plate
-    ctx.fillStyle = primaryBg;
-    ctx.beginPath();
-    ctx.roundRect(marginX, marginY - 45, 400, 45, [4, 4, 4, 4]);
-    ctx.fill();
-
-    // Accent Plate (Subtitle)
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.fillStyle = accentBg;
-    ctx.beginPath();
-    ctx.roundRect(marginX, marginY, 360, 24, [0, 0, 4, 4]);
-    ctx.fill();
-
-    // Red Live bar decorator
-    ctx.fillStyle = '#ef4444';
-    ctx.beginPath();
-    ctx.roundRect(marginX, marginY - 45, 6, 45, [4, 0, 0, 4]);
-    ctx.fill();
-
-    // Texts
-    ctx.fillStyle = primaryText;
-    ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(lt.title.toUpperCase(), marginX + 16, marginY - 14);
-
-    ctx.fillStyle = accentText;
-    ctx.font = 'bold 12px sans-serif';
-    ctx.fillText(lt.subtitle.toUpperCase(), marginX + 12, marginY + 16);
-    
-    ctx.restore();
   }
 
   public drawEventBanner(

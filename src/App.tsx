@@ -213,12 +213,16 @@ export default function App() {
 
     webrtcService.connect('switcher');
     webrtcService.onNodesUpdated((nodes) => {
-      // Merge connected remote phone nodes into camera list ensuring unique keys
       setCameras((prev) => {
         const existingMap = new Map<string, CameraNode>(prev.map((c) => [c.id, c]));
+        
+        // Track new nodes we need to call
+        const nodesToCall: string[] = [];
 
         nodes.forEach((n) => {
           if (n.role === 'camera' && n.id !== webrtcService.getClientId()) {
+            const isNewOrNoStream = !existingMap.has(n.id) || !existingMap.get(n.id)?.stream;
+            
             if (existingMap.has(n.id)) {
               const existing = existingMap.get(n.id)!;
               existingMap.set(n.id, {
@@ -251,8 +255,26 @@ export default function App() {
                 audioLevel: 50,
               });
             }
+            
+            if (isNewOrNoStream) {
+              nodesToCall.push(n.id);
+            }
           }
         });
+
+        // Fire callCameraNode for new nodes outside of the setState map loop
+        // to avoid infinite loops, we just trigger it and let it update state asynchronously
+        setTimeout(() => {
+          nodesToCall.forEach(nodeId => {
+             webrtcService.callCameraNode(nodeId, (remoteStream) => {
+                setCameras((currentCameras) => 
+                  currentCameras.map(cam => 
+                    cam.id === nodeId ? { ...cam, stream: remoteStream } : cam
+                  )
+                );
+             });
+          });
+        }, 100);
 
         return Array.from(existingMap.values());
       });
@@ -416,6 +438,17 @@ export default function App() {
     setIsDriveModalOpen(true);
   };
 
+  if (activeTab === 'camera') {
+    return (
+      <div className="min-h-screen bg-black text-[#E2E8F0] flex flex-col font-sans selection:bg-red-500 selection:text-white">
+        <MobileCameraTransmitter
+          onBackToSwitcher={() => {}} // Disabled for camera feed view isolation
+          assignedAngle={typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('angle') as any) || 'left-goal' : 'left-goal'}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0B0D11] text-[#E2E8F0] flex flex-col font-sans relative selection:bg-red-500 selection:text-white">
       {/* Subtle ambient lighting for frosted glass diffusion */}
@@ -495,16 +528,6 @@ export default function App() {
               onSelectPipPosition={handleSelectPipPosition}
             />
           </div>
-        )}
-
-        {activeTab === 'camera' && (
-          <MobileCameraTransmitter
-            onBackToSwitcher={() => {
-              window.history.pushState({}, '', '/');
-              setActiveTab('switcher');
-            }}
-            assignedAngle={typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('angle') as any) || 'left-goal' : 'left-goal'}
-          />
         )}
 
         {activeTab === 'apk-guide' && <ApkArchitectureGuide />}

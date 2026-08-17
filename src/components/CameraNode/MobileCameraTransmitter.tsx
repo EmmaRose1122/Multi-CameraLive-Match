@@ -157,13 +157,7 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
     >
       {/* Top Mobile Transmitter HUD */}
       <div className="absolute top-0 inset-x-0 z-20 bg-gradient-to-b from-black/90 via-black/40 to-transparent p-4 flex items-center justify-between">
-        <button
-          onClick={onBackToSwitcher}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900/80 backdrop-blur-md text-white text-xs font-bold border border-slate-700"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Exit Node</span>
-        </button>
+        <div className="w-24"></div> {/* Spacer to maintain centering */}
 
         {/* Tally Light Indicator */}
         <div className="flex items-center gap-2 bg-slate-950/90 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-slate-800 shadow-xl">
