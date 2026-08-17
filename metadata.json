@@ -1,0 +1,6 @@
+{
+  "name": "Multi-Cam Live Match Studio",
+  "description": "Custom multi-camera live streaming, wireless video switcher, RAM rolling instant replay buffer, and sports graphics overlay system for live football broadcasts.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
