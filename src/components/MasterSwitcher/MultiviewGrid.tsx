@@ -297,7 +297,7 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
                 )}
 
                 {/* Real-time Decibel Audio Peak Meter */}
-                <BroadcastAudioMeter cameraId={cam.id} />
+                <BroadcastAudioMeter cameraId={cam.id} audioLevel={cam.audioLevel || 0} />
 
                 {/* Overlaid Telemetry Capsule (Battery / Temp / Latency) */}
                 <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-white/80 font-mono border border-white/10">

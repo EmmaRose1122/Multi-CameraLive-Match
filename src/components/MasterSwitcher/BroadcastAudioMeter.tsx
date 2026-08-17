@@ -2,10 +2,16 @@ import React, { useEffect, useRef } from 'react';
 
 interface BroadcastAudioMeterProps {
   cameraId: string;
+  audioLevel?: number;
 }
 
-export const BroadcastAudioMeter: React.FC<BroadcastAudioMeterProps> = ({ cameraId }) => {
+export const BroadcastAudioMeter: React.FC<BroadcastAudioMeterProps> = ({ cameraId, audioLevel = 0 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const audioLevelRef = useRef(audioLevel);
+
+  useEffect(() => {
+    audioLevelRef.current = audioLevel;
+  }, [audioLevel]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -26,22 +32,17 @@ export const BroadcastAudioMeter: React.FC<BroadcastAudioMeterProps> = ({ camera
     let time = 0;
 
     const draw = () => {
-      // Simulate audio levels
-      time += 0.05;
+      // Use real audio level from camera telemetry (0 to 1 scale)
+      // If audioLevel is 0, keep it very low to show it's active but quiet.
+      const normalizedLevel = Math.max(0.01, audioLevelRef.current / 100);
       
-      // Seeded roughly by camera id to make them look distinct
-      const seed = cameraId.charCodeAt(0) || 0;
-      
-      const targetL = Math.max(0.02, 0.5 + Math.sin(time * 0.8 + seed) * 0.3 + (Math.random() * 0.3 - 0.15));
-      const targetR = Math.max(0.02, 0.5 + Math.sin(time * 0.85 + seed) * 0.3 + (Math.random() * 0.3 - 0.15));
+      // Simulate minor stereo separation from the mono source for visual realism
+      const targetL = normalizedLevel;
+      const targetR = normalizedLevel * 0.95; // Slightly offset right channel
 
       // Smooth interpolation for realistic meter ballistics (fast attack, slower decay)
       baseLevelL += (targetL - baseLevelL) * (targetL > baseLevelL ? 0.4 : 0.1);
       baseLevelR += (targetR - baseLevelR) * (targetR > baseLevelR ? 0.4 : 0.1);
-
-      // Add occasional spikes for realism (like shouting or loud whistle)
-      if (Math.random() > 0.98) baseLevelL += Math.random() * 0.5;
-      if (Math.random() > 0.98) baseLevelR += Math.random() * 0.5;
       
       baseLevelL = Math.min(1.05, Math.max(0, baseLevelL));
       baseLevelR = Math.min(1.05, Math.max(0, baseLevelR));
