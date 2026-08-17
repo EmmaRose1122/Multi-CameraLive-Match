@@ -62,6 +62,9 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
           videoRef.current.srcObject = s;
         }
         webrtcService.setLocalStream(s);
+        
+        // IMPORTANT: Only connect WebRTC AFTER stream is acquired so tracks exist for the initial offer!
+        webrtcService.connect('camera', assignedAngle, `Phone Cam (${assignedAngle})`);
       } catch (err: any) {
         console.warn('Physical camera access error:', err);
         setErrorMsg('Camera permissions requested or simulated hardware node in use.');
@@ -69,9 +72,6 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
     }
 
     startCam();
-
-    // Connect WebRTC signaling as camera node
-    webrtcService.connect('camera', assignedAngle, `Phone Cam (${assignedAngle})`);
     webrtcService.onTallyState((state) => {
       setTallyState(state);
       // Play subtle vibration on mobile if live program

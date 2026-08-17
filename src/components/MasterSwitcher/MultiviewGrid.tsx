@@ -12,13 +12,15 @@ import {
   AlertTriangle,
   WifiOff,
 } from 'lucide-react';
-import { CameraNode, SwitcherState } from '../../types/broadcast';
+import { CameraNode, SwitcherState, ScoreboardState } from '../../types/broadcast';
+import { graphicsCompositor } from '../../services/graphicsCompositor';
 import { matchSimulator } from '../../services/simulationData';
 import { BroadcastAudioMeter } from './BroadcastAudioMeter';
 
 interface MultiviewGridProps {
   cameras: CameraNode[];
   switcherState: SwitcherState;
+  scoreboard?: ScoreboardState;
   onSelectPreview: (cameraId: string) => void;
   onCutToProgram: (cameraId: string) => void;
   onToggleTorch?: (cameraId: string) => void;
@@ -32,6 +34,7 @@ interface MultiviewGridProps {
 export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
   cameras,
   switcherState,
+  scoreboard,
   onSelectPreview,
   onCutToProgram,
   onToggleTorch,
@@ -42,6 +45,52 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
   onToggleLatencySim,
 }) => {
   const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const overlayCanvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+
+  // Attach MediaStreams to video elements when they become available
+  useEffect(() => {
+    cameras.forEach(cam => {
+      if (cam.stream && cam.isPhysical) {
+        const videoEl = videoRefs.current.get(cam.id);
+        if (videoEl && videoEl.srcObject !== cam.stream) {
+          videoEl.srcObject = cam.stream;
+          videoEl.play().catch(e => console.error("Video play failed:", e));
+        }
+      }
+    });
+  }, [cameras]);
+
+  // Scoreboard rendering loop for PGM camera
+  useEffect(() => {
+    let animFrame: number;
+    const renderOverlays = () => {
+      if (scoreboard && switcherState.programCameraId) {
+        const overlayCanvas = overlayCanvasRefs.current.get(switcherState.programCameraId);
+        if (overlayCanvas) {
+          const ctx = overlayCanvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            
+            // Draw scoreboard
+            if (scoreboard.showScoreboard) {
+              graphicsCompositor.drawScoreboard(ctx, overlayCanvas.width, overlayCanvas.height, scoreboard);
+            }
+            // Draw lower third / banners
+            if (scoreboard.activeBanner && scoreboard.activeBanner.expiresAt > Date.now()) {
+              graphicsCompositor.drawEventBanner(ctx, overlayCanvas.width, overlayCanvas.height, scoreboard.activeBanner);
+            } else if (scoreboard.showLowerThird && scoreboard.customLowerThird) {
+              graphicsCompositor.drawCustomLowerThird(ctx, overlayCanvas.width, overlayCanvas.height, scoreboard.customLowerThird, scoreboard.theme);
+            }
+          }
+        }
+      }
+      animFrame = requestAnimationFrame(renderOverlays);
+    };
+    animFrame = requestAnimationFrame(renderOverlays);
+    
+    return () => cancelAnimationFrame(animFrame);
+  }, [scoreboard, switcherState.programCameraId]);
 
   useEffect(() => {
     // Register simulated camera canvases with simulation engine
@@ -191,7 +240,7 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
       </div>
 
       {/* Multiview Tiles Grid */}
-      <div className="flex overflow-x-auto snap-x snap-mandatory pb-2 md:grid md:grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-2 gap-3.5">
         {cameras.map((cam, idx) => {
           const isPgm = switcherState.programCameraId === cam.id;
           const isPvw = switcherState.previewCameraId === cam.id;
@@ -280,9 +329,32 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
                   }}
                   width={640}
                   height={360}
-                  className="w-full h-full object-cover cursor-pointer"
+                  className={`w-full h-full object-cover cursor-pointer absolute inset-0 ${cam.isPhysical && cam.stream ? 'hidden' : ''}`}
                   onClick={() => onSelectPreview(cam.id)}
                 />
+                {cam.isPhysical && (
+                  <video
+                    ref={(el) => {
+                      if (el) videoRefs.current.set(cam.id, el);
+                    }}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover cursor-pointer absolute inset-0"
+                    onClick={() => onSelectPreview(cam.id)}
+                  />
+                )}
+                {/* Overlay Canvas for Scoreboard (Only active on PGM) */}
+                {isPgm && scoreboard && (
+                  <canvas
+                    ref={(el) => {
+                      if (el) overlayCanvasRefs.current.set(cam.id, el);
+                    }}
+                    width={640}
+                    height={360}
+                    className="w-full h-full object-cover pointer-events-none absolute inset-0 z-10"
+                  />
+                )}
 
                 {/* Prominent High Latency Video Overlay Warning */}
                 {isDegraded && (

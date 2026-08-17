@@ -26,7 +26,15 @@ import { googleDriveService } from './services/googleDriveService';
 
 export default function App() {
   // Navigation & Role Modes
-  const [activeTab, setActiveTab] = useState<'switcher' | 'camera' | 'multiview' | 'apk-guide'>('switcher');
+  const [activeTab, setActiveTab] = useState<'switcher' | 'camera' | 'multiview' | 'apk-guide'>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const mode = params.get('mode');
+      if (mode === 'camera') return 'camera';
+      if (mode === 'multiview') return 'multiview';
+    }
+    return 'switcher';
+  });
   const [isPairingModalOpen, setIsPairingModalOpen] = useState(false);
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
   const [pendingDriveBlob, setPendingDriveBlob] = useState<Blob | null>(null);
@@ -90,7 +98,7 @@ export default function App() {
   const [cameras, setCameras] = useState<CameraNode[]>([
     {
       id: 'cam_center',
-      name: 'Cam 1 • Center Field Tactical',
+      name: 'Cam 1 • Center Field',
       angle: 'center',
       isPhysical: false,
       stream: null,
@@ -109,7 +117,7 @@ export default function App() {
     },
     {
       id: 'cam_left_goal',
-      name: 'Cam 2 • Left Goal Post (North)',
+      name: 'Cam 2 • Left Goal',
       angle: 'left-goal',
       isPhysical: false,
       stream: null,
@@ -128,7 +136,7 @@ export default function App() {
     },
     {
       id: 'cam_right_goal',
-      name: 'Cam 3 • Right Goal Post (South)',
+      name: 'Cam 3 • Right Goal',
       angle: 'right-goal',
       isPhysical: false,
       stream: null,
@@ -147,7 +155,7 @@ export default function App() {
     },
     {
       id: 'cam_tactical',
-      name: 'Cam 4 • 2D Tactical Radar',
+      name: 'Cam 4 • Pitch Side',
       angle: 'tactical',
       isPhysical: false,
       stream: null,
@@ -435,6 +443,7 @@ export default function App() {
               <MultiviewGrid
                 cameras={cameras}
                 switcherState={switcherState}
+                scoreboard={scoreboard}
                 onSelectPreview={handleSelectPreview}
                 onCutToProgram={handleCutToProgram}
                 onToggleTorch={handleToggleTorch}
@@ -476,6 +485,7 @@ export default function App() {
             <MultiviewGrid
               cameras={cameras}
               switcherState={switcherState}
+              scoreboard={scoreboard}
               onSelectPreview={handleSelectPreview}
               onCutToProgram={handleCutToProgram}
               onToggleTorch={handleToggleTorch}
@@ -489,8 +499,11 @@ export default function App() {
 
         {activeTab === 'camera' && (
           <MobileCameraTransmitter
-            onBackToSwitcher={() => setActiveTab('switcher')}
-            assignedAngle="left-goal"
+            onBackToSwitcher={() => {
+              window.history.pushState({}, '', '/');
+              setActiveTab('switcher');
+            }}
+            assignedAngle={typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('angle') as any) || 'left-goal' : 'left-goal'}
           />
         )}
 

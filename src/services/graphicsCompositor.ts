@@ -165,7 +165,7 @@ export class GraphicsCompositor {
     ctx.fillText('TACTICAL PiP', x + 6, y + 12);
   }
 
-  private drawScoreboard(ctx: CanvasRenderingContext2D, w: number, h: number, sb: ScoreboardState) {
+  public drawScoreboard(ctx: CanvasRenderingContext2D, w: number, h: number, sb: ScoreboardState) {
     const min = Math.floor(sb.matchSeconds / 60);
     const sec = sb.matchSeconds % 60;
     const timeStr = `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
@@ -292,7 +292,7 @@ export class GraphicsCompositor {
     }
   }
 
-  private drawCustomLowerThird(
+  public drawCustomLowerThird(
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
@@ -348,7 +348,7 @@ export class GraphicsCompositor {
     ctx.restore();
   }
 
-  private drawEventBanner(
+  public drawEventBanner(
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
