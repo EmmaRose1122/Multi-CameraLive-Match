@@ -345,6 +345,33 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
 
               {/* Video Surface */}
               <div className="relative aspect-video bg-black overflow-hidden group">
+                {/* Debug Stats Overlay */}
+                {cam.isPhysical && (
+                   <div className="absolute top-1 left-1 bg-black/70 rounded px-1.5 py-1 text-[10px] font-mono text-white/80 pointer-events-none z-30 flex flex-col gap-0.5">
+                     <div className="flex justify-between gap-3">
+                       <span className="text-white/50">RES:</span>
+                       <span className="text-emerald-400 font-bold">
+                         {cameraStats[cam.id]?.frameWidth || 0}x{cameraStats[cam.id]?.frameHeight || 0}
+                       </span>
+                     </div>
+                     <div className="flex justify-between gap-3">
+                       <span className="text-white/50">FPS:</span>
+                       <span className="text-blue-400 font-bold">
+                         {Math.round(cameraStats[cam.id]?.frameRate || 0)}
+                       </span>
+                     </div>
+                     <div className="flex justify-between gap-3">
+                       <span className="text-white/50">RX:</span>
+                       <span className="text-amber-400 font-bold">
+                         {((cameraStats[cam.id]?.bytesReceived || 0) / 1024).toFixed(1)} KB
+                       </span>
+                     </div>
+                     {cam.fallbackFrame && !cam.stream && (
+                        <div className="text-red-400 font-bold text-[9px] mt-0.5 border-t border-white/10 pt-0.5">MJPEG FALLBACK</div>
+                     )}
+                   </div>
+                )}
+                
                 <canvas
                   id={`feed-canvas-${cam.id}`}
                   ref={(el) => {

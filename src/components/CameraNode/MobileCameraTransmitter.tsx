@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { TallyState, CameraAngle } from '../../types/broadcast';
 import { webrtcService } from '../../services/webrtcService';
+import { CameraNode } from '../../types/broadcast';
 
 interface MobileCameraTransmitterProps {
   onBackToSwitcher: () => void;
@@ -105,6 +106,29 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
       }
     };
   }, [isFrontCamera, resolution, fps, assignedAngle]);
+
+  // MJPEG Fallback Broadcaster
+  useEffect(() => {
+    let interval: any;
+    if (stream && videoRef.current) {
+      const hiddenCanvas = document.createElement('canvas');
+      hiddenCanvas.width = 640;
+      hiddenCanvas.height = 360;
+      const ctx = hiddenCanvas.getContext('2d');
+      
+      interval = setInterval(() => {
+        if (ctx && videoRef.current && videoRef.current.videoWidth > 0) {
+          ctx.drawImage(videoRef.current, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+          const frameDataUrl = hiddenCanvas.toDataURL('image/jpeg', 0.5);
+          // Broadcast to all switchers via signaling server
+          webrtcService.send({ type: 'frame-sync', frameDataUrl });
+        }
+      }, 150); // ~6-7 FPS
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    }
+  }, [stream]);
 
   // Battery & Thermal simulator
   useEffect(() => {

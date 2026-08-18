@@ -136,6 +136,17 @@ export default function App() {
     }
 
     webrtcService.connect('switcher');
+    webrtcService.onRemoteFrame((nodeId, frameDataUrl) => {
+      setCameras((currentCameras) => {
+        return currentCameras.map((cam) => {
+          if (cam.id === nodeId) {
+            return { ...cam, fallbackFrame: frameDataUrl };
+          }
+          return cam;
+        });
+      });
+    });
+
     webrtcService.onNodesUpdated((nodes) => {
       setCameras((prev) => {
         const existingMap = new Map<string, CameraNode>(prev.map((c) => [c.id, c]));

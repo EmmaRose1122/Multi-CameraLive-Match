@@ -167,9 +167,10 @@ export class WebRTCService {
        videoEl.playsInline = true;
        videoEl.srcObject = stream;
        
-       videoEl.onplay = () => {
-         if (this.transmissionInterval) clearInterval(this.transmissionInterval);
-         this.transmissionInterval = setInterval(() => {
+       videoEl.play().catch(e => console.log("Hidden video play error", e));
+       
+       if (this.transmissionInterval) clearInterval(this.transmissionInterval);
+       this.transmissionInterval = setInterval(() => {
            if (this.ws && this.ws.readyState === WebSocket.OPEN && this.hiddenCanvas) {
              const ctx = this.hiddenCanvas.getContext('2d');
              if (ctx && videoEl.videoWidth > 0) {
@@ -179,7 +180,6 @@ export class WebRTCService {
              }
            }
          }, 100); // 10 FPS fallback
-       };
     }
     // Add or replace tracks for any existing peer connections
     this.peerConnections.forEach((pc) => {
