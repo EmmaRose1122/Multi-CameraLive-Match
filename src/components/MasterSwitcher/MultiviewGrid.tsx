@@ -12,6 +12,8 @@ import {
   AlertTriangle,
   WifiOff,
 } from 'lucide-react';
+import { useState } from 'react';
+import { webrtcService } from '../../services/webrtcService';
 import { CameraNode, SwitcherState, ScoreboardState } from '../../types/broadcast';
 import { graphicsCompositor } from '../../services/graphicsCompositor';
 import { matchSimulator } from '../../services/simulationData';
@@ -47,13 +49,34 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
   const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const overlayCanvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const [cameraStats, setCameraStats] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const statsMap: Record<string, any> = {};
+      for (const cam of cameras) {
+        if (cam.isPhysical) {
+          const stats = await webrtcService.getPeerStats(cam.id);
+          if (stats) {
+            statsMap[cam.id] = stats;
+          }
+        }
+      }
+      setCameraStats(statsMap);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cameras]);
 
   // Attach MediaStreams to video elements when they become available
   useEffect(() => {
+    console.log('[DEBUG] MultiviewGrid useEffect[cameras] triggered. Total cameras:', cameras.length);
     cameras.forEach(cam => {
+      console.log('[DEBUG] Checking camera binding:', { id: cam.id, isPhysical: cam.isPhysical, hasStream: !!cam.stream });
       if (cam.stream && cam.isPhysical) {
         const videoEl = videoRefs.current.get(cam.id);
+        console.log('[DEBUG] Found video element for', cam.id, '?', !!videoEl);
         if (videoEl && videoEl.srcObject !== cam.stream) {
+          console.log('[DEBUG] Binding new stream to video element for', cam.id);
           videoEl.srcObject = cam.stream;
           videoEl.play().catch(e => console.error("Video play failed:", e));
         }
@@ -332,10 +355,22 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
                   className={`w-full h-full object-cover cursor-pointer absolute inset-0 ${cam.isPhysical && cam.stream ? 'hidden' : ''}`}
                   onClick={() => onSelectPreview(cam.id)}
                 />
+                {cam.isPhysical && !cam.stream && cam.fallbackFrame && (
+                  <img src={cam.fallbackFrame} className="w-full h-full object-cover cursor-pointer absolute inset-0" onClick={() => onSelectPreview(cam.id)} />
+                )}
                 {cam.isPhysical && (
                   <video
                     ref={(el) => {
-                      if (el) videoRefs.current.set(cam.id, el);
+                      if (el) {
+                        console.log('[DEBUG] Setting videoRef for cam.id:', cam.id);
+                        videoRefs.current.set(cam.id, el);
+                        // Also trigger immediate bind if stream exists
+                        if (cam.stream && el.srcObject !== cam.stream) {
+                           console.log('[DEBUG] Immediate stream binding from ref callback for cam:', cam.id);
+                           el.srcObject = cam.stream;
+                           el.play().catch(e => console.error("Video play failed:", e));
+                        }
+                      }
                     }}
                     autoPlay
                     playsInline
@@ -343,6 +378,31 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
                     className="w-full h-full object-cover cursor-pointer absolute inset-0"
                     onClick={() => onSelectPreview(cam.id)}
                   />
+                )}
+                {cam.isPhysical && (
+                   <div className="absolute top-1 left-1 bg-black/70 rounded px-1.5 py-1 text-[10px] font-mono text-white/80 pointer-events-none z-30 flex flex-col gap-0.5">
+                     <div className="flex justify-between gap-3">
+                       <span className="text-white/50">RES:</span>
+                       <span className="text-emerald-400 font-bold">
+                         {cameraStats[cam.id]?.frameWidth || 0}x{cameraStats[cam.id]?.frameHeight || 0}
+                       </span>
+                     </div>
+                     <div className="flex justify-between gap-3">
+                       <span className="text-white/50">FPS:</span>
+                       <span className="text-blue-400 font-bold">
+                         {Math.round(cameraStats[cam.id]?.frameRate || 0)}
+                       </span>
+                     </div>
+                     <div className="flex justify-between gap-3">
+                       <span className="text-white/50">RX:</span>
+                       <span className="text-amber-400 font-bold">
+                         {((cameraStats[cam.id]?.bytesReceived || 0) / 1024).toFixed(1)} KB
+                       </span>
+                     </div>
+                     {cam.fallbackFrame && !cam.stream && (
+                        <div className="text-red-400 font-bold text-[9px] mt-0.5 border-t border-white/10 pt-0.5">MJPEG FALLBACK</div>
+                     )}
+                   </div>
                 )}
                 {/* Overlay Canvas for Scoreboard (Only active on PGM) */}
                 {isPgm && scoreboard && (

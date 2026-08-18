@@ -311,6 +311,72 @@ export class GraphicsCompositor {
     ctx.fillText(banner.subtitle, x + 24, y + 45);
   }
 
+
+  public drawCustomLowerThird(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    lowerThird: { title: string; subtitle: string },
+    theme: 'modern' | 'broadcast' | 'minimal'
+  ) {
+    if (!lowerThird.title && !lowerThird.subtitle) return;
+
+    const marginX = w * 0.08;
+    const marginY = h - h * 0.15;
+    
+    ctx.save();
+    
+    if (theme === 'modern') {
+      const boxW = Math.max(300, ctx.measureText(lowerThird.title).width + 60, ctx.measureText(lowerThird.subtitle).width + 60);
+      const boxH = 65;
+      
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 4;
+      
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      ctx.beginPath();
+      ctx.roundRect(marginX, marginY - boxH, boxW, boxH, 8);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+      
+      ctx.fillStyle = '#3b82f6';
+      ctx.beginPath();
+      ctx.roundRect(marginX, marginY - boxH, 10, boxH, [8, 0, 0, 8]);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 24px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(lowerThird.title.toUpperCase(), marginX + 28, marginY - boxH + 30);
+      
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '500 16px sans-serif';
+      ctx.fillText(lowerThird.subtitle, marginX + 28, marginY - boxH + 52);
+    } else {
+      const boxW = Math.max(300, ctx.measureText(lowerThird.title).width + 60, ctx.measureText(lowerThird.subtitle).width + 60);
+      const boxH = 60;
+      
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.fillRect(marginX, marginY - boxH, boxW, boxH);
+      
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(marginX, marginY - boxH - 6, boxW, 6);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(lowerThird.title.toUpperCase(), marginX + 20, marginY - boxH + 30);
+      
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '16px sans-serif';
+      ctx.fillText(lowerThird.subtitle, marginX + 20, marginY - boxH + 52);
+    }
+    
+    ctx.restore();
+  }
+
   private drawReplayWatermark(
     ctx: CanvasRenderingContext2D,
     w: number,

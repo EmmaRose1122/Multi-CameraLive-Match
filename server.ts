@@ -146,6 +146,20 @@ async function startServer() {
             }
             break;
           }
+          
+          case 'frame-sync': {
+             // Broadcast frame to switchers
+             clients.forEach((client) => {
+               if (client.role === 'switcher' && client.ws.readyState === WebSocket.OPEN) {
+                 client.ws.send(JSON.stringify({
+                   type: 'frame-sync',
+                   senderId: clientId,
+                   frameDataUrl: msg.frameDataUrl
+                 }));
+               }
+             });
+             break;
+          }
 
           case 'ice-candidate': {
             const targetClient = clients.get(msg.targetId);

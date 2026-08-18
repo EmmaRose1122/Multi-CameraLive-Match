@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { MultiviewGrid } from './components/MasterSwitcher/MultiviewGrid';
+import { ProgramMonitor } from './components/MasterSwitcher/ProgramMonitor';
 import { ScoreboardOverlayPanel } from './components/MasterSwitcher/ScoreboardOverlayPanel';
 import { InstantReplayDeck } from './components/MasterSwitcher/InstantReplayDeck';
 import { RtmpYouTubeBroadcaster } from './components/MasterSwitcher/RtmpYouTubeBroadcaster';
@@ -95,84 +96,7 @@ export default function App() {
   });
 
   // Multi-Camera Fleet
-  const [cameras, setCameras] = useState<CameraNode[]>([
-    {
-      id: 'cam_center',
-      name: 'Cam 1 • Center Field',
-      angle: 'center',
-      isPhysical: false,
-      stream: null,
-      isConnected: true,
-      fps: 60,
-      resolution: '1080p',
-      batteryLevel: 94,
-      temperatureC: 33,
-      tallyState: 'program',
-      torchOn: false,
-      screenDimmed: false,
-      zoomLevel: 1,
-      bitrateKbps: 6200,
-      latencyMs: 24,
-      audioLevel: 68,
-    },
-    {
-      id: 'cam_left_goal',
-      name: 'Cam 2 • Left Goal',
-      angle: 'left-goal',
-      isPhysical: false,
-      stream: null,
-      isConnected: true,
-      fps: 60,
-      resolution: '1080p',
-      batteryLevel: 89,
-      temperatureC: 35,
-      tallyState: 'preview',
-      torchOn: false,
-      screenDimmed: false,
-      zoomLevel: 1,
-      bitrateKbps: 5900,
-      latencyMs: 28,
-      audioLevel: 54,
-    },
-    {
-      id: 'cam_right_goal',
-      name: 'Cam 3 • Right Goal',
-      angle: 'right-goal',
-      isPhysical: false,
-      stream: null,
-      isConnected: true,
-      fps: 60,
-      resolution: '1080p',
-      batteryLevel: 91,
-      temperatureC: 34,
-      tallyState: 'standby',
-      torchOn: false,
-      screenDimmed: false,
-      zoomLevel: 1,
-      bitrateKbps: 5850,
-      latencyMs: 31,
-      audioLevel: 48,
-    },
-    {
-      id: 'cam_tactical',
-      name: 'Cam 4 • Pitch Side',
-      angle: 'tactical',
-      isPhysical: false,
-      stream: null,
-      isConnected: true,
-      fps: 60,
-      resolution: '1080p',
-      batteryLevel: 100,
-      temperatureC: 31,
-      tallyState: 'standby',
-      torchOn: false,
-      screenDimmed: false,
-      zoomLevel: 1,
-      bitrateKbps: 4500,
-      latencyMs: 18,
-      audioLevel: 40,
-    },
-  ]);
+  const [cameras, setCameras] = useState<CameraNode[]>([]);
 
   // RTMP Broadcast Output Config
   const [rtmpConfig, setRtmpConfig] = useState<RtmpConfig>({
@@ -218,10 +142,13 @@ export default function App() {
         
         // Track new nodes we need to call
         const nodesToCall: string[] = [];
+        // Keep track of nodes we are currently calling so we don't spam offers
+        const callingNodes = (window as any).callingNodes || new Set<string>();
+        (window as any).callingNodes = callingNodes;
 
         nodes.forEach((n) => {
           if (n.role === 'camera' && n.id !== webrtcService.getClientId()) {
-            const isNewOrNoStream = !existingMap.has(n.id) || !existingMap.get(n.id)?.stream;
+            const isNewOrNoStream = (!existingMap.has(n.id) || !existingMap.get(n.id)?.stream) && !callingNodes.has(n.id);
             
             if (existingMap.has(n.id)) {
               const existing = existingMap.get(n.id)!;
@@ -266,17 +193,42 @@ export default function App() {
         // to avoid infinite loops, we just trigger it and let it update state asynchronously
         setTimeout(() => {
           nodesToCall.forEach(nodeId => {
+             callingNodes.add(nodeId);
              webrtcService.callCameraNode(nodeId, (remoteStream) => {
-                setCameras((currentCameras) => 
-                  currentCameras.map(cam => 
+                console.log('[DEBUG] App.tsx received remote stream for nodeId:', nodeId, remoteStream.getTracks());
+                setCameras((currentCameras) => {
+                  const updated = currentCameras.map(cam => 
                     cam.id === nodeId ? { ...cam, stream: remoteStream } : cam
-                  )
-                );
+                  );
+                  // Auto-select first camera if nothing is selected
+                  setSwitcherState(s => {
+                    if (updated.length > 0) {
+                      const firstId = updated[0].id;
+                      if (!updated.find(c => c.id === s.programCamera)) {
+                        return { ...s, programCamera: firstId, previewCamera: updated.length > 1 ? updated[1].id : firstId };
+                      }
+                    }
+                    return s;
+                  });
+                  return updated;
+                });
              });
           });
         }, 100);
 
-        return Array.from(existingMap.values());
+        const newCameras = Array.from(existingMap.values());
+        // Also auto-select on initial connect before stream arrives
+        setSwitcherState(s => {
+           if (newCameras.length > 0) {
+              const firstId = newCameras[0].id;
+              if (!newCameras.find(c => c.id === s.programCamera)) {
+                 return { ...s, programCamera: firstId, previewCamera: newCameras.length > 1 ? newCameras[1].id : firstId };
+              }
+           }
+           return s;
+        });
+
+        return newCameras;
       });
     });
   }, []);
@@ -490,6 +442,11 @@ export default function App() {
 
             {/* Right Column: Scoreboard Desk & Instant Replay */}
             <div className="w-full lg:w-[400px] xl:w-[450px] flex flex-col gap-4 flex-shrink-0">
+              <ProgramMonitor 
+                cameras={cameras}
+                switcherState={switcherState}
+                scoreboard={scoreboard}
+              />
               <ScoreboardOverlayPanel
                 scoreboard={scoreboard}
                 setScoreboard={setScoreboard}

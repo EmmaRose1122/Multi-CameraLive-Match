@@ -21,6 +21,13 @@ export class WebRTCService {
   private onScoreboardSyncCallback: ((scoreboard: any) => void) | null = null;
 
   // ICE Servers (Local STUN / Direct LAN)
+
+  // Fallback MJPEG over WebSocket
+  private useFallbackTransmission = false;
+  private hiddenCanvas: HTMLCanvasElement | null = null;
+  private transmissionInterval: any = null;
+  private onRemoteFrameCallbacks = new Map<string, (frameDataUrl: string) => void>();
+
   private rtcConfig: RTCConfiguration = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -107,6 +114,11 @@ export class WebRTCService {
         }
         break;
 
+            case 'frame-sync':
+        const globalCb = this.onRemoteFrameCallbacks.get('global');
+        if (globalCb) globalCb(msg.senderId, msg.frameDataUrl);
+        break;
+
       case 'scoreboard-sync':
         if (this.onScoreboardSyncCallback) {
           this.onScoreboardSyncCallback(msg.scoreboard);
@@ -119,53 +131,143 @@ export class WebRTCService {
     return this.clientId;
   }
 
+  public async getPeerStats(nodeId: string): Promise<any> {
+    const pc = this.peerConnections.get(nodeId);
+    if (!pc) return null;
+    try {
+      const stats = await pc.getStats();
+      let result = { bytesReceived: 0, frameRate: 0, frameWidth: 0, frameHeight: 0 };
+      stats.forEach((report) => {
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
+          result.bytesReceived = report.bytesReceived || 0;
+          result.frameRate = report.framesPerSecond || 0;
+          result.frameWidth = report.frameWidth || 0;
+          result.frameHeight = report.frameHeight || 0;
+        }
+      });
+      return result;
+    } catch (e) {
+      return null;
+    }
+  }
+
   public setLocalStream(stream: MediaStream) {
     this.localStream = stream;
-    // Add tracks to any existing peer connections
+    
+    // Start fallback transmission if on a mobile node
+    if (this.role === 'camera') {
+       if (!this.hiddenCanvas) {
+         this.hiddenCanvas = document.createElement('canvas');
+         this.hiddenCanvas.width = 640;
+         this.hiddenCanvas.height = 360;
+       }
+       const videoEl = document.createElement('video');
+       videoEl.autoplay = true;
+       videoEl.muted = true;
+       videoEl.playsInline = true;
+       videoEl.srcObject = stream;
+       
+       videoEl.onplay = () => {
+         if (this.transmissionInterval) clearInterval(this.transmissionInterval);
+         this.transmissionInterval = setInterval(() => {
+           if (this.ws && this.ws.readyState === WebSocket.OPEN && this.hiddenCanvas) {
+             const ctx = this.hiddenCanvas.getContext('2d');
+             if (ctx && videoEl.videoWidth > 0) {
+               ctx.drawImage(videoEl, 0, 0, this.hiddenCanvas.width, this.hiddenCanvas.height);
+               const frameDataUrl = this.hiddenCanvas.toDataURL('image/jpeg', 0.5);
+               this.send({ type: 'frame-sync', frameDataUrl });
+             }
+           }
+         }, 100); // 10 FPS fallback
+       };
+    }
+    // Add or replace tracks for any existing peer connections
     this.peerConnections.forEach((pc) => {
+      const senders = pc.getSenders();
       stream.getTracks().forEach((track) => {
-        pc.addTrack(track, stream);
+        const sender = senders.find(s => s.track && s.track.kind === track.kind);
+        if (sender) {
+          sender.replaceTrack(track);
+        } else {
+          pc.addTrack(track, stream);
+        }
       });
     });
   }
 
-  /**
-   * Master Switcher initiates WebRTC connection to remote mobile camera node.
-   */
-  public async callCameraNode(targetNodeId: string, onRemoteStream: (stream: MediaStream) => void) {
-    this.onRemoteStreamCallbacks.set(targetNodeId, onRemoteStream);
+  private iceCandidateQueues = new Map<string, RTCIceCandidateInit[]>();
 
+  private async handleRemoteIceCandidate(senderId: string, candidate: RTCIceCandidateInit) {
+    const pc = this.peerConnections.get(senderId);
+    if (!pc) {
+      if (!this.iceCandidateQueues.has(senderId)) this.iceCandidateQueues.set(senderId, []);
+      this.iceCandidateQueues.get(senderId)!.push(candidate);
+      return;
+    }
+    
+    const addCandidate = async (cand: RTCIceCandidateInit) => {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(cand));
+      } catch (e) {
+        console.error('Error adding ICE candidate', e);
+      }
+    };
+
+    if (pc.remoteDescription && pc.remoteDescription.type) {
+      await addCandidate(candidate);
+    } else {
+      if (!this.iceCandidateQueues.has(senderId)) this.iceCandidateQueues.set(senderId, []);
+      this.iceCandidateQueues.get(senderId)!.push(candidate);
+    }
+  }
+
+
+  public callCameraNode(nodeId: string, onRemoteStream: (stream: MediaStream) => void) {
     const pc = new RTCPeerConnection(this.rtcConfig);
-    this.peerConnections.set(targetNodeId, pc);
+    this.peerConnections.set(nodeId, pc);
+    this.onRemoteStreamCallbacks.set(nodeId, onRemoteStream);
+
+    if (this.localStream) {
+      this.localStream.getTracks().forEach((track) => pc.addTrack(track, this.localStream));
+    }
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         this.send({
           type: 'ice-candidate',
-          targetId: targetNodeId,
+          targetId: nodeId,
           candidate: event.candidate,
         });
       }
     };
 
     pc.ontrack = (event) => {
+      console.log('[DEBUG] --- WEBRTC ONTRACK RECEIVED (answer) ---', { 
+        streams: event.streams, 
+        track: event.track, 
+        senderId 
+      });
+      console.log('[DEBUG] --- WEBRTC ONTRACK RECEIVED (offer) ---', { 
+        streams: event.streams, 
+        track: event.track, 
+        nodeId 
+      });
+      console.log('--- WEBRTC ONTRACK RECEIVED (offer) ---', event.streams);
       if (event.streams && event.streams[0]) {
         onRemoteStream(event.streams[0]);
       }
     };
 
-    // Create Offer with low-latency constraints
-    const offer = await pc.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true,
-    });
-    await pc.setLocalDescription(offer);
-
-    this.send({
-      type: 'webrtc-offer',
-      targetId: targetNodeId,
-      offer,
-    });
+    pc.createOffer()
+      .then((offer) => pc.setLocalDescription(offer))
+      .then(() => {
+        this.send({
+          type: 'webrtc-offer',
+          targetId: nodeId,
+          offer: pc.localDescription,
+        });
+      })
+      .catch((e) => console.error('Error creating offer', e));
   }
 
   private async handleRemoteOffer(senderId: string, offer: RTCSessionDescriptionInit) {
@@ -173,9 +275,7 @@ export class WebRTCService {
     this.peerConnections.set(senderId, pc);
 
     if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => {
-        pc.addTrack(track, this.localStream!);
-      });
+      this.localStream.getTracks().forEach((track) => pc.addTrack(track, this.localStream));
     }
 
     pc.onicecandidate = (event) => {
@@ -188,31 +288,48 @@ export class WebRTCService {
       }
     };
 
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
+    pc.ontrack = (event) => {
+      console.log('--- WEBRTC ONTRACK RECEIVED (answer) ---', event.streams);
+      if (event.streams && event.streams[0]) {
+        const cb = this.onRemoteStreamCallbacks.get(senderId);
+        if (cb) cb(event.streams[0]);
+      }
+    };
 
-    this.send({
-      type: 'webrtc-answer',
-      targetId: senderId,
-      answer,
-    });
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      if (this.iceCandidateQueues.has(senderId)) {
+        for (const cand of this.iceCandidateQueues.get(senderId)) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
+        }
+        this.iceCandidateQueues.delete(senderId);
+      }
+      
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      this.send({
+        type: 'webrtc-answer',
+        targetId: senderId,
+        answer: pc.localDescription,
+      });
+    } catch (e) {
+      console.error('Error handling offer', e);
+    }
   }
 
   private async handleRemoteAnswer(senderId: string, answer: RTCSessionDescriptionInit) {
     const pc = this.peerConnections.get(senderId);
     if (pc) {
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    }
-  }
-
-  private async handleRemoteIceCandidate(senderId: string, candidate: RTCIceCandidateInit) {
-    const pc = this.peerConnections.get(senderId);
-    if (pc && candidate) {
       try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        if (this.iceCandidateQueues.has(senderId)) {
+          for (const cand of this.iceCandidateQueues.get(senderId)) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
+          }
+          this.iceCandidateQueues.delete(senderId);
+        }
       } catch (e) {
-        console.error('Error adding ICE candidate', e);
+        console.error('Error handling answer', e);
       }
     }
   }
@@ -269,6 +386,10 @@ export class WebRTCService {
 
   public onRemoteControl(cb: (cmd: string, val: any) => void) {
     this.onRemoteControlCallback = cb;
+  }
+
+  public onRemoteFrame(cb: (nodeId: string, frameDataUrl: string) => void) {
+    this.onRemoteFrameCallbacks.set('global', cb);
   }
 
   public onScoreboardSync(cb: (scoreboard: any) => void) {
