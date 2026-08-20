@@ -13,6 +13,8 @@ import {
   Settings,
   ArrowLeft,
   Volume2,
+  Mic,
+  MicOff,
 } from 'lucide-react';
 import { TallyState, CameraAngle } from '../../types/broadcast';
 import { webrtcService } from '../../services/webrtcService';
@@ -66,7 +68,7 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
         
         // Remove strict width/height to let the device naturally orient the sensor,
         // but prefer the highest resolution available that matches the target.
-        const constraints: MediaStreamConstraints = {
+        let constraints: MediaStreamConstraints = {
           video: {
             facingMode: isFrontCamera ? 'user' : 'environment',
             width: resolution === '1080p' ? { ideal: 1920 } : { ideal: 1280 },
@@ -75,7 +77,18 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
           },
           audio: true,
         };
-        const s = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        let s;
+        try {
+          s = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (initialErr) {
+          console.warn("High-res constraints failed, falling back to safe constraints", initialErr);
+          constraints = { 
+            video: { facingMode: isFrontCamera ? 'user' : 'environment' }, 
+            audio: true 
+          };
+          s = await navigator.mediaDevices.getUserMedia(constraints);
+        }
 
         currentStream = s;
         setStream(s);
@@ -87,6 +100,9 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
         // IMPORTANT: Only connect WebRTC AFTER stream is acquired so tracks exist for the initial offer!
         if (!webrtcService.getClientId() || webrtcService.getClientId() === '') {
           webrtcService.connect('camera', assignedAngle, `Phone Cam (${assignedAngle})`);
+        } else if (webrtcService.getRole() !== 'camera') {
+          // If we navigated here from another tab, update our role on the server
+          webrtcService.updateRoleAndAngle('camera', assignedAngle, `Phone Cam (${assignedAngle})`);
         }
       } catch (err: any) {
         console.warn('Physical camera access error:', err);
@@ -120,6 +136,34 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
 
  
 
+  // Live Frame Streaming Fallback (MJPEG / WebSocket Frame Sync)
+  useEffect(() => {
+    if (!stream) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 360;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    let active = true;
+    const interval = setInterval(() => {
+      if (!active || !videoRef.current || videoRef.current.readyState < 2) return;
+      try {
+        if (ctx) {
+          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+          const frameDataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          webrtcService.sendFrame(frameDataUrl);
+        }
+      } catch (e) {
+        // Ignore canvas draw error
+      }
+    }, 66); // ~15 FPS live preview sync over WebSocket
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [stream]);
+
   // Audio Mute Toggle
   useEffect(() => {
     if (stream) {
@@ -134,6 +178,7 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
     const interval = setInterval(() => {
       setTempC((prev) => (screenDimmed ? Math.max(30, prev - 0.2) : Math.min(41, prev + 0.1)));
       webrtcService.sendTelemetry(batteryLevel, fps, Math.round(tempC), resolution);
+      webrtcService.getSenderStatsAndScale();
     }, 3000);
     return () => clearInterval(interval);
   }, [batteryLevel, fps, tempC, resolution, screenDimmed]);

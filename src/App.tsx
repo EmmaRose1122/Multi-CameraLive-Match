@@ -14,6 +14,7 @@ import { RemoteCameraFleetModal } from './components/MasterSwitcher/RemoteCamera
 import { MobileCameraTransmitter } from './components/CameraNode/MobileCameraTransmitter';
 import { ApkArchitectureGuide } from './components/ApkArchitectureGuide';
 import { GoogleDriveSaveModal } from './components/GoogleDriveSaveModal';
+import { AudioMixingPanel } from './components/MasterSwitcher/AudioMixingPanel';
 
 import {
   CameraNode,
@@ -27,12 +28,13 @@ import { googleDriveService } from './services/googleDriveService';
 
 export default function App() {
   // Navigation & Role Modes
-  const [activeTab, setActiveTab] = useState<'switcher' | 'camera' | 'multiview' | 'apk-guide'>(() => {
+  const [activeTab, setActiveTab] = useState<'switcher' | 'camera' | 'multiview' | 'audio-mixer' | 'apk-guide'>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const mode = params.get('mode');
       if (mode === 'camera') return 'camera';
       if (mode === 'multiview') return 'multiview';
+      if (mode === 'audio-mixer' || mode === 'audio') return 'audio-mixer';
     }
     return 'switcher';
   });
@@ -141,13 +143,56 @@ export default function App() {
     webrtcService.connect('switcher');
     webrtcService.onRemoteFrame((nodeId, frameDataUrl) => {
       setCameras((currentCameras) => {
-        return currentCameras.map((cam) => {
+        let found = false;
+        const updated = currentCameras.map((cam) => {
           if (cam.id === nodeId) {
+            found = true;
             return { ...cam, fallbackFrame: frameDataUrl };
           }
           return cam;
         });
+        if (!found && nodeId) {
+          updated.push({
+            id: nodeId,
+            name: `Remote Phone Cam`,
+            angle: 'custom',
+            isPhysical: true,
+            stream: null,
+            fallbackFrame: frameDataUrl,
+            isConnected: true,
+            fps: 30,
+            resolution: '1080p',
+            batteryLevel: 85,
+            temperatureC: 34,
+            tallyState: 'standby',
+            torchOn: false,
+            screenDimmed: false,
+            zoomLevel: 1,
+            bitrateKbps: 5800,
+            latencyMs: 35,
+            audioLevel: 50,
+          });
+        }
+        return updated;
       });
+    });
+
+    webrtcService.onNodeTelemetry((nodeId, deviceInfo) => {
+      if (!deviceInfo) return;
+      setCameras(prev => prev.map(c => {
+        if (c.id === nodeId) {
+           return {
+             ...c,
+             fps: deviceInfo.fps ?? c.fps,
+             resolution: deviceInfo.resolution ?? c.resolution,
+             batteryLevel: deviceInfo.battery ?? c.batteryLevel,
+             latencyMs: deviceInfo.latencyMs ?? c.latencyMs,
+             bitrateKbps: deviceInfo.bitrateKbps ?? c.bitrateKbps,
+             temperatureC: deviceInfo.temperature ? parseInt(deviceInfo.temperature) : c.temperatureC
+           };
+        }
+        return c;
+      }));
     });
 
     webrtcService.onNodesUpdated((nodes) => {
@@ -204,7 +249,6 @@ export default function App() {
         });
 
         // Fire callCameraNode for new nodes outside of the setState map loop
-        // to avoid infinite loops, we just trigger it and let it update state asynchronously
         setTimeout(() => {
           nodesToCall.forEach(nodeId => {
              callingNodes.add(nodeId);
@@ -214,12 +258,12 @@ export default function App() {
                   const updated = currentCameras.map(cam => 
                     cam.id === nodeId ? { ...cam, stream: remoteStream } : cam
                   );
-                  // Auto-select first camera if nothing is selected
+                  // Auto-select camera if nothing selected
                   setSwitcherState(s => {
                     if (updated.length > 0) {
                       const firstId = updated[0].id;
-                      if (!updated.find(c => c.id === s.programCamera)) {
-                        return { ...s, programCamera: firstId, previewCamera: updated.length > 1 ? updated[1].id : firstId };
+                      if (!updated.find(c => c.id === s.programCameraId)) {
+                        return { ...s, programCameraId: firstId, previewCameraId: updated.length > 1 ? updated[1].id : firstId };
                       }
                     }
                     return s;
@@ -235,8 +279,8 @@ export default function App() {
         setSwitcherState(s => {
            if (newCameras.length > 0) {
               const firstId = newCameras[0].id;
-              if (!newCameras.find(c => c.id === s.programCamera)) {
-                 return { ...s, programCamera: firstId, previewCamera: newCameras.length > 1 ? newCameras[1].id : firstId };
+              if (!newCameras.find(c => c.id === s.programCameraId)) {
+                 return { ...s, programCameraId: firstId, previewCameraId: newCameras.length > 1 ? newCameras[1].id : firstId };
               }
            }
            return s;
@@ -427,7 +471,7 @@ export default function App() {
       {/* View Switcher based on Active Tab */}
       
       {/* The Camera Node - Keeps running in background if started */}
-      {(activeTab === 'camera' || (typeof window !== 'undefined' && window.__hasStartedCamera)) && (
+      {(activeTab === 'camera' || (typeof window !== 'undefined' && (window as any).__hasStartedCamera)) && (
         <div className={activeTab === 'camera' ? 'flex-1 flex flex-col h-screen absolute inset-0 z-[100] bg-black' : 'fixed -top-[9999px] -left-[9999px] w-[10px] h-[10px] opacity-0 pointer-events-none overflow-hidden'}>
           <MobileCameraTransmitter
             onBackToSwitcher={() => setActiveTab('switcher')}
@@ -442,45 +486,76 @@ export default function App() {
       )}
       <main className={"flex-1 w-full mx-auto p-3 sm:p-4 flex flex-col gap-4 max-w-[1400px] " + (activeTab === 'camera' ? 'hidden' : '')}>
         {activeTab === 'switcher' && (
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Left Column: Multiview Production Grid (4 Cameras) */}
-            <div className="flex-1 overflow-hidden">
-              <MultiviewGrid
-                cameras={cameras}
-                switcherState={switcherState}
-                scoreboard={scoreboard}
-                onSelectPreview={handleSelectPreview}
-                onCutToProgram={handleCutToProgram}
-                onToggleTorch={handleToggleTorch}
-                onToggleDimScreen={handleToggleDimScreen}
-                onTogglePip={handleTogglePip}
-                onSelectPipSource={handleSelectPipSource}
-                onSelectPipPosition={handleSelectPipPosition}
-                onToggleLatencySim={handleToggleLatencySim}
-              />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col lg:flex-row gap-4">
+              {/* Left Column: Multiview Production Grid (4 Cameras) */}
+              <div className="flex-1 overflow-hidden">
+                <MultiviewGrid
+                  cameras={cameras}
+                  switcherState={switcherState}
+                  scoreboard={scoreboard}
+                  onSelectPreview={handleSelectPreview}
+                  onCutToProgram={handleCutToProgram}
+                  onToggleTorch={handleToggleTorch}
+                  onToggleDimScreen={handleToggleDimScreen}
+                  onTogglePip={handleTogglePip}
+                  onSelectPipSource={handleSelectPipSource}
+                  onSelectPipPosition={handleSelectPipPosition}
+                  onToggleLatencySim={handleToggleLatencySim}
+                />
+              </div>
+
+              {/* Right Column: Scoreboard Desk & Instant Replay */}
+              <div className="w-full lg:w-[400px] xl:w-[450px] flex flex-col gap-4 flex-shrink-0">
+                <ProgramMonitor 
+                  cameras={cameras}
+                  switcherState={switcherState}
+                  scoreboard={scoreboard}
+                />
+                <ScoreboardOverlayPanel
+                  scoreboard={scoreboard}
+                  setScoreboard={setScoreboard}
+                  onTriggerEvent={(e) => console.log('Match Event:', e)}
+                />
+
+                <InstantReplayDeck
+                  switcherState={switcherState}
+                  setSwitcherState={setSwitcherState}
+                  scoreboard={scoreboard}
+                  onSaveToDrive={handleSaveToDrive}
+                />
+                
+                {/* YouTube RTMP Broadcaster & Live Chat Simulator */}
+                <RtmpYouTubeBroadcaster
+                  rtmpConfig={rtmpConfig}
+                  setRtmpConfig={setRtmpConfig}
+                  scoreboard={scoreboard}
+                />
+              </div>
             </div>
 
-            {/* Right Column: Scoreboard Desk & Instant Replay */}
-            <div className="w-full lg:w-[400px] xl:w-[450px] flex flex-col gap-4 flex-shrink-0">
-              <ProgramMonitor 
+            {/* Broadcast Multi-Node Audio Console Bay */}
+            <AudioMixingPanel
+              cameras={cameras}
+              switcherState={switcherState}
+            />
+          </div>
+        )}
+
+        {activeTab === 'audio-mixer' && (
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="flex-1 flex flex-col gap-4">
+              <AudioMixingPanel
+                cameras={cameras}
+                switcherState={switcherState}
+              />
+            </div>
+            <div className="w-full lg:w-[420px] flex flex-col gap-4">
+              <ProgramMonitor
                 cameras={cameras}
                 switcherState={switcherState}
                 scoreboard={scoreboard}
               />
-              <ScoreboardOverlayPanel
-                scoreboard={scoreboard}
-                setScoreboard={setScoreboard}
-                onTriggerEvent={(e) => console.log('Match Event:', e)}
-              />
-
-              <InstantReplayDeck
-                switcherState={switcherState}
-                setSwitcherState={setSwitcherState}
-                scoreboard={scoreboard}
-                onSaveToDrive={handleSaveToDrive}
-              />
-              
-              {/* YouTube RTMP Broadcaster & Live Chat Simulator */}
               <RtmpYouTubeBroadcaster
                 rtmpConfig={rtmpConfig}
                 setRtmpConfig={setRtmpConfig}
@@ -503,6 +578,10 @@ export default function App() {
               onTogglePip={handleTogglePip}
               onSelectPipSource={handleSelectPipSource}
               onSelectPipPosition={handleSelectPipPosition}
+            />
+            <AudioMixingPanel
+              cameras={cameras}
+              switcherState={switcherState}
             />
           </div>
         )}

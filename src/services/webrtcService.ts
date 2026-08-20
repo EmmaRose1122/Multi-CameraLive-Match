@@ -19,6 +19,11 @@ export class WebRTCService {
   private onTallyStateCallback: ((state: TallyState) => void) | null = null;
   private onRemoteControlCallback: ((cmd: string, val: any) => void) | null = null;
   private onScoreboardSyncCallback: ((scoreboard: any) => void) | null = null;
+  private onNodeTelemetryCallback: ((nodeId: string, deviceInfo: any) => void) | null = null;
+
+  public onNodeTelemetry(cb: (nodeId: string, deviceInfo: any) => void) {
+    this.onNodeTelemetryCallback = cb;
+  }
 
   // ICE Servers (Local STUN / Direct LAN)
 
@@ -26,7 +31,7 @@ export class WebRTCService {
   private useFallbackTransmission = false;
   private hiddenCanvas: HTMLCanvasElement | null = null;
   private transmissionInterval: any = null;
-  private onRemoteFrameCallbacks = new Map<string, (frameDataUrl: string) => void>();
+  private onRemoteFrameCallbacks = new Map<string, (nodeId: string, frameDataUrl: string) => void>();
 
   private rtcConfig: RTCConfiguration = {
     iceServers: [
@@ -40,8 +45,13 @@ export class WebRTCService {
     this.wsUrl = `${protocol}//${window.location.host}/ws/signaling`;
   }
 
+  private cameraAngle: string = 'center';
+  private nodeName: string = 'Master Broadcast Switcher';
+
   public connect(role: 'switcher' | 'camera' | 'viewer', cameraAngle?: string, name?: string): Promise<string> {
     this.role = role;
+    if (cameraAngle) this.cameraAngle = cameraAngle;
+    if (name) this.nodeName = name;
     return new Promise((resolve) => {
       try {
         this.ws = new WebSocket(this.wsUrl);
@@ -90,6 +100,12 @@ export class WebRTCService {
         }
         break;
 
+      case 'node-telemetry':
+        if (this.onNodeTelemetryCallback) {
+          this.onNodeTelemetryCallback(msg.nodeId, msg.deviceInfo);
+        }
+        break;
+
       case 'webrtc-offer':
         this.handleRemoteOffer(msg.senderId, msg.offer);
         break;
@@ -130,6 +146,81 @@ export class WebRTCService {
   public getClientId(): string {
     return this.clientId;
   }
+  
+  public getRole(): string {
+    return this.role;
+  }
+  
+  public updateRoleAndAngle(role: 'switcher' | 'camera' | 'viewer', cameraAngle: string, name: string) {
+     this.role = role;
+     this.cameraAngle = cameraAngle;
+     this.nodeName = name;
+     this.send({
+        type: 'register-role',
+        role: this.role,
+        cameraAngle: this.cameraAngle,
+        name: this.nodeName
+     });
+  }
+
+  
+  public async getSenderStatsAndScale() {
+    this.peerConnections.forEach(async (pc, nodeId) => {
+      try {
+        const stats = await pc.getStats();
+        let rtt = 0;
+        
+        stats.forEach((report) => {
+          if (report.type === 'remote-inbound-rtp' && report.kind === 'video') {
+            if (report.roundTripTime !== undefined) rtt = report.roundTripTime * 1000;
+          } else if (report.type === 'candidate-pair' && report.state === 'succeeded' && rtt === 0) {
+            if (report.currentRoundTripTime !== undefined) rtt = report.currentRoundTripTime * 1000;
+          }
+        });
+        
+        // Let's store or use RTT
+        if (rtt > 0 && this.role === 'camera') {
+           this.applyDynamicScaling(nodeId, rtt);
+        }
+      } catch (e) {}
+    });
+  }
+
+  private async applyDynamicScaling(nodeId: string, currentLatencyMs: number) {
+      const pc = this.peerConnections.get(nodeId);
+      if (!pc) return;
+      const senders = pc.getSenders();
+      const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+      if (!videoSender) return;
+
+      const params = videoSender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) {
+         params.encodings = [{}];
+      }
+      
+      let encoding = params.encodings[0];
+      
+      if (currentLatencyMs > 250) {
+          encoding.maxBitrate = 800000; // 800 kbps
+          encoding.scaleResolutionDownBy = 2; // Reduce resolution
+      } else if (currentLatencyMs > 120) {
+          encoding.maxBitrate = 2000000; // 2 Mbps
+          encoding.scaleResolutionDownBy = 1.5;
+      } else {
+          encoding.maxBitrate = 6000000; // 6 Mbps
+          encoding.scaleResolutionDownBy = 1;
+      }
+      
+      try {
+        await videoSender.setParameters(params);
+        // Also inform the switcher about the latency so it shows on the UI
+        this.send({
+            type: 'telemetry-update',
+            targetId: nodeId,
+            deviceInfo: { latencyMs: Math.round(currentLatencyMs), bitrateKbps: Math.round(encoding.maxBitrate / 1000) }
+        });
+      } catch (e) {}
+  }
 
   public async getPeerStats(nodeId: string): Promise<any> {
     const pc = this.peerConnections.get(nodeId);
@@ -155,35 +246,6 @@ export class WebRTCService {
     this.localStream = stream;
     
     // Start fallback transmission if on a mobile node
-    if (this.role === 'camera') { 
-       if (!this.hiddenCanvas) {
-         this.hiddenCanvas = document.createElement('canvas');
-         this.hiddenCanvas.width = 640;
-         this.hiddenCanvas.height = 360;
-       }
-       const videoEl = document.createElement('video');
-       videoEl.autoplay = true;
-       videoEl.muted = true;
-       videoEl.playsInline = true;
-       videoEl.srcObject = stream;
-       
-       videoEl.play().catch(e => console.log("Hidden video play error", e));
-       
-       if (this.transmissionInterval) clearInterval(this.transmissionInterval);
-       this.transmissionInterval = setInterval(() => {
-           if (this.ws && this.ws.readyState === WebSocket.OPEN && this.hiddenCanvas) {
-             const ctx = this.hiddenCanvas.getContext('2d');
-             if (ctx && videoEl.videoWidth > 0) {
-               ctx.drawImage(videoEl, 0, 0, this.hiddenCanvas.width, this.hiddenCanvas.height);
-               const frameDataUrl = this.hiddenCanvas.toDataURL('image/jpeg', 0.5);
-               this.send({ type: 'frame-sync', frameDataUrl });
-             }
-           }
-         }, 100); // 10 FPS fallback
-    }
-    
-    // Start fallback transmission if on a mobile node
-    
     // Add or replace tracks for any existing peer connections
     this.peerConnections.forEach((pc) => {
       const senders = pc.getSenders();
@@ -225,13 +287,28 @@ export class WebRTCService {
   }
 
 
+  public sendFrame(frameDataUrl: string) {
+    this.send({
+      type: 'frame-sync',
+      frameDataUrl,
+    });
+  }
+
   public callCameraNode(nodeId: string, onRemoteStream: (stream: MediaStream) => void) {
     const pc = new RTCPeerConnection(this.rtcConfig);
     this.peerConnections.set(nodeId, pc);
     this.onRemoteStreamCallbacks.set(nodeId, onRemoteStream);
 
+    // Switcher needs to receive video and audio tracks from camera node
+    try {
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+    } catch (e) {
+      console.warn('Could not add transceivers directly', e);
+    }
+
     if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => pc.addTrack(track, this.localStream));
+      this.localStream.getTracks().forEach((track) => pc.addTrack(track, this.localStream!));
     }
 
     pc.onicecandidate = (event) => {
@@ -245,23 +322,18 @@ export class WebRTCService {
     };
 
     pc.ontrack = (event) => {
-      console.log('[DEBUG] --- WEBRTC ONTRACK RECEIVED (answer) ---', { 
-        streams: event.streams, 
-        track: event.track, 
-        senderId 
-      });
-      console.log('[DEBUG] --- WEBRTC ONTRACK RECEIVED (offer) ---', { 
-        streams: event.streams, 
-        track: event.track, 
-        nodeId 
-      });
-      console.log('--- WEBRTC ONTRACK RECEIVED (offer) ---', event.streams);
-      if (event.streams && event.streams[0]) {
-        onRemoteStream(event.streams[0]);
+      console.log('[WebRTC] ontrack received on switcher for node:', nodeId, event.track.kind, event.streams);
+      let stream = (event.streams && event.streams[0]) ? event.streams[0] : null;
+      if (!stream) {
+        stream = new MediaStream([event.track]);
       }
+      onRemoteStream(stream);
     };
 
-    pc.createOffer()
+    pc.createOffer({
+      offerToReceiveVideo: true,
+      offerToReceiveAudio: true,
+    })
       .then((offer) => pc.setLocalDescription(offer))
       .then(() => {
         this.send({
@@ -278,7 +350,7 @@ export class WebRTCService {
     this.peerConnections.set(senderId, pc);
 
     if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => pc.addTrack(track, this.localStream));
+      this.localStream.getTracks().forEach((track) => pc.addTrack(track, this.localStream!));
     }
 
     pc.onicecandidate = (event) => {
@@ -292,21 +364,18 @@ export class WebRTCService {
     };
 
     pc.ontrack = (event) => {
-      console.log('--- WEBRTC ONTRACK RECEIVED (answer) ---', event.streams);
-      if (event.streams && event.streams[0]) {
-        const cb = this.onRemoteStreamCallbacks.get(senderId);
-        if (cb) {
-           // Wait a tiny bit for ICE connection to establish before showing video stream 
-           // otherwise the video element hides the MJPEG fallback immediately.
-           setTimeout(() => cb(event.streams[0]), 500);
-        }
+      let stream = (event.streams && event.streams[0]) ? event.streams[0] : null;
+      if (!stream) stream = new MediaStream([event.track]);
+      const cb = this.onRemoteStreamCallbacks.get(senderId);
+      if (cb) {
+        cb(stream);
       }
     };
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       if (this.iceCandidateQueues.has(senderId)) {
-        for (const cand of this.iceCandidateQueues.get(senderId)) {
+        for (const cand of this.iceCandidateQueues.get(senderId)!) {
           try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
         }
         this.iceCandidateQueues.delete(senderId);

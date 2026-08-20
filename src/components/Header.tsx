@@ -1,10 +1,10 @@
 import React from 'react';
-import { Video, Camera, Grid, Smartphone, Youtube, HardDrive, ShieldCheck, Flame, Radio } from 'lucide-react';
+import { Video, Camera, Grid, Smartphone, Youtube, HardDrive, ShieldCheck, Flame, Radio, Sliders } from 'lucide-react';
 import { ScoreboardState, RtmpConfig } from '../types/broadcast';
 
 interface HeaderProps {
-  activeTab: 'switcher' | 'camera' | 'multiview' | 'apk-guide';
-  setActiveTab: (tab: 'switcher' | 'camera' | 'multiview' | 'apk-guide') => void;
+  activeTab: 'switcher' | 'camera' | 'multiview' | 'audio-mixer' | 'apk-guide';
+  setActiveTab: (tab: 'switcher' | 'camera' | 'multiview' | 'audio-mixer' | 'apk-guide') => void;
   scoreboard: ScoreboardState;
   rtmpConfig: RtmpConfig;
   connectedNodesCount: number;
@@ -90,7 +90,20 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <Grid className="w-3.5 h-3.5" />
-            <span>Multiview Grid</span>
+            <span>Multiview</span>
+          </button>
+
+          <button
+            id="nav-audio-mixer-tab"
+            onClick={() => setActiveTab('audio-mixer')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${
+              activeTab === 'audio-mixer'
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40 font-bold'
+                : 'text-white/60 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Audio Mixer</span>
           </button>
 
           <button

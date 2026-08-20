@@ -132,3 +132,43 @@ export interface SwitcherState {
   replayTransitionDurationMs: number;
   replayTransitionDirection: 'in' | 'out';
 }
+
+export interface ChannelAudioState {
+  nodeId: string;
+  name: string;
+  angle: CameraAngle;
+  gain: number; // 0.0 to 1.5 (1.0 = unity 0 dB, 0 = mute / -inf)
+  gainDb: number; // -60 to +10 dB
+  muted: boolean;
+  solo: boolean;
+  pan: number; // -1.0 (Left) to +1.0 (Right), 0 = Center
+  afv: boolean; // Audio Follows Video (auto-fade on program cut)
+  eqLow: number; // -12 to +12 dB
+  eqMid: number; // -12 to +12 dB
+  eqHigh: number; // -12 to +12 dB
+  meterL: number; // 0 to 1
+  meterR: number; // 0 to 1
+  peakL: number; // 0 to 1
+  peakR: number; // 0 to 1
+  isClipping: boolean;
+  isAudioPresent: boolean;
+}
+
+export interface MasterAudioState {
+  masterGain: number; // 0.0 to 1.5 (1.0 = unity 0 dB)
+  masterGainDb: number; // -60 to +10 dB
+  masterMuted: boolean;
+  limiterEnabled: boolean;
+  compressorEnabled: boolean;
+  delayMs: number; // 0 to 800ms lip-sync latency offset
+  testTone: boolean; // 1kHz calibration tone
+  stadiumAmbience: boolean; // Crowd atmosphere audio bed
+  stadiumAmbienceLevel: number; // 0 to 1
+  monitorSource: 'master' | 'program' | 'solo' | 'headphones';
+  meterL: number; // 0 to 1
+  meterR: number; // 0 to 1
+  peakL: number; // 0 to 1
+  peakR: number; // 0 to 1
+  isClipping: boolean;
+}
+

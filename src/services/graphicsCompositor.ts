@@ -4,7 +4,7 @@
  * instant replay watermarks, and PiP feeds into a single broadcast output stream.
  */
 
-import { ScoreboardState, SwitcherState } from '../types/broadcast';
+import { ScoreboardState, SwitcherState, ScoreboardTheme } from '../types/broadcast';
 import { BufferedFrame } from './rollingReplayBuffer';
 
 export class GraphicsCompositor {
@@ -317,7 +317,7 @@ export class GraphicsCompositor {
     w: number,
     h: number,
     lowerThird: { title: string; subtitle: string },
-    theme: 'modern' | 'broadcast' | 'minimal'
+    theme: ScoreboardTheme | string
   ) {
     if (!lowerThird.title && !lowerThird.subtitle) return;
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { audioMixerService } from '../../services/audioMixerService';
 
 interface BroadcastAudioMeterProps {
   cameraId: string;
@@ -27,18 +28,25 @@ export const BroadcastAudioMeter: React.FC<BroadcastAudioMeterProps> = ({ camera
     let peakHoldTimeL = 0;
     let peakHoldTimeR = 0;
 
-    // We'll use a local time counter to avoid relying strictly on Date.now() 
-    // for smooth animation scaling.
-    let time = 0;
-
     const draw = () => {
-      // Use real audio level from camera telemetry (0 to 1 scale)
-      // If audioLevel is 0, keep it very low to show it's active but quiet.
-      const normalizedLevel = Math.max(0.01, audioLevelRef.current / 100);
-      
-      // Simulate minor stereo separation from the mono source for visual realism
-      const targetL = normalizedLevel;
-      const targetR = normalizedLevel * 0.95; // Slightly offset right channel
+      // Fetch channel state from AudioMixerService if available
+      const channel = audioMixerService.getChannelState(cameraId);
+      let targetL = 0;
+      let targetR = 0;
+
+      if (channel) {
+        if (channel.muted) {
+          targetL = 0;
+          targetR = 0;
+        } else {
+          targetL = Math.max(0.01, channel.meterL * 1.5);
+          targetR = Math.max(0.01, channel.meterR * 1.5);
+        }
+      } else {
+        const normalizedLevel = Math.max(0.01, audioLevelRef.current / 100);
+        targetL = normalizedLevel;
+        targetR = normalizedLevel * 0.95;
+      }
 
       // Smooth interpolation for realistic meter ballistics (fast attack, slower decay)
       baseLevelL += (targetL - baseLevelL) * (targetL > baseLevelL ? 0.4 : 0.1);

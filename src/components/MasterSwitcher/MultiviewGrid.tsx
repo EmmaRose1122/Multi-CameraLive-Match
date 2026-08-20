@@ -382,54 +382,32 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
                   className={`w-full h-full object-contain cursor-pointer absolute inset-0 ${cam.isPhysical && cam.stream ? 'hidden' : ''}`}
                   onClick={() => onSelectPreview(cam.id)}
                 />
-                {cam.isPhysical && cam.fallbackFrame && (!cam.stream || (cameraStats[cam.id]?.bytesReceived || 0) === 0) && (
-                  <img src={cam.fallbackFrame} className="w-full h-full object-contain cursor-pointer absolute inset-0 z-20" onClick={() => onSelectPreview(cam.id)} />
+                {cam.isPhysical && cam.fallbackFrame && (
+                  <img
+                    src={cam.fallbackFrame}
+                    className="w-full h-full object-contain cursor-pointer absolute inset-0 z-10"
+                    style={{ display: (cam.stream && (cameraStats[cam.id]?.bytesReceived || 0) > 0) ? 'none' : 'block' }}
+                    onClick={() => onSelectPreview(cam.id)}
+                    alt={cam.name}
+                  />
                 )}
                 {cam.isPhysical && (
                   <video
                     ref={(el) => {
                       if (el) {
-                        console.log('[DEBUG] Setting videoRef for cam.id:', cam.id);
                         videoRefs.current.set(cam.id, el);
-                        // Also trigger immediate bind if stream exists
                         if (cam.stream && el.srcObject !== cam.stream) {
-                           console.log('[DEBUG] Immediate stream binding from ref callback for cam:', cam.id);
-                           el.srcObject = cam.stream;
-                           el.play().catch(e => console.error("Video play failed:", e));
+                          el.srcObject = cam.stream;
+                          el.play().catch(e => console.error("Video play failed:", e));
                         }
                       }
                     }}
                     autoPlay
                     playsInline
                     muted
-                    className="w-full h-full object-contain cursor-pointer absolute inset-0"
+                    className="w-full h-full object-contain cursor-pointer absolute inset-0 z-0"
                     onClick={() => onSelectPreview(cam.id)}
                   />
-                )}
-                {cam.isPhysical && (
-                   <div className="absolute top-1 left-1 bg-black/70 rounded px-1.5 py-1 text-[10px] font-mono text-white/80 pointer-events-none z-30 flex flex-col gap-0.5">
-                     <div className="flex justify-between gap-3">
-                       <span className="text-white/50">RES:</span>
-                       <span className="text-emerald-400 font-bold">
-                         {cameraStats[cam.id]?.frameWidth || 0}x{cameraStats[cam.id]?.frameHeight || 0}
-                       </span>
-                     </div>
-                     <div className="flex justify-between gap-3">
-                       <span className="text-white/50">FPS:</span>
-                       <span className="text-blue-400 font-bold">
-                         {Math.round(cameraStats[cam.id]?.frameRate || 0)}
-                       </span>
-                     </div>
-                     <div className="flex justify-between gap-3">
-                       <span className="text-white/50">RX:</span>
-                       <span className="text-amber-400 font-bold">
-                         {((cameraStats[cam.id]?.bytesReceived || 0) / 1024).toFixed(1)} KB
-                       </span>
-                     </div>
-                     {cam.fallbackFrame && !cam.stream && (
-                        <div className="text-red-400 font-bold text-[9px] mt-0.5 border-t border-white/10 pt-0.5">MJPEG FALLBACK</div>
-                     )}
-                   </div>
                 )}
                 {/* Overlay Canvas for Scoreboard (Only active on PGM) */}
                 {isPgm && scoreboard && (
