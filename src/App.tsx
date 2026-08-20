@@ -26,7 +26,6 @@ import { webrtcService } from './services/webrtcService';
 import { googleDriveService } from './services/googleDriveService';
 
 export default function App() {
-  useEffect(() => { if (activeTab === 'camera') window.__hasStartedCamera = true; }, [activeTab]);
   // Navigation & Role Modes
   const [activeTab, setActiveTab] = useState<'switcher' | 'camera' | 'multiview' | 'apk-guide'>(() => {
     if (typeof window !== 'undefined') {
@@ -37,6 +36,8 @@ export default function App() {
     }
     return 'switcher';
   });
+  
+  useEffect(() => { if (activeTab === 'camera') (window as any).__hasStartedCamera = true; }, [activeTab]);
   const [isPairingModalOpen, setIsPairingModalOpen] = useState(false);
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
   const [pendingDriveBlob, setPendingDriveBlob] = useState<Blob | null>(null);
@@ -426,7 +427,7 @@ export default function App() {
       
       {/* The Camera Node - Keeps running in background if started */}
       {(activeTab === 'camera' || (typeof window !== 'undefined' && window.__hasStartedCamera)) && (
-        <div className={activeTab === 'camera' ? 'flex-1 flex flex-col h-screen absolute inset-0 z-[100] bg-black' : 'hidden'}>
+        <div className={activeTab === 'camera' ? 'flex-1 flex flex-col h-screen absolute inset-0 z-[100] bg-black' : 'fixed -top-[9999px] -left-[9999px] w-[10px] h-[10px] opacity-0 pointer-events-none overflow-hidden'}>
           <MobileCameraTransmitter
             onBackToSwitcher={() => setActiveTab('switcher')}
             assignedAngle={typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('angle') as any) || 'left-goal' : 'left-goal'}
