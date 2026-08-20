@@ -135,6 +135,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('mode') === 'camera') {
       setActiveTab('camera');
+      return;
     }
 
     webrtcService.connect('switcher');

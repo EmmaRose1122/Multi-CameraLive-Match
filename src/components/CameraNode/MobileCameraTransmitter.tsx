@@ -65,25 +65,16 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
         
         // Remove strict width/height to let the device naturally orient the sensor,
         // but prefer the highest resolution available that matches the target.
-        // Just specify the ideal largest dimension.
-        // Let the browser automatically determine the best aspect ratio based on phone orientation.
-        let constraints: MediaStreamConstraints = {
+        const constraints: MediaStreamConstraints = {
           video: {
             facingMode: isFrontCamera ? 'user' : 'environment',
-            width: { ideal: resolution === '1080p' ? 1920 : 1280 },
+            width: resolution === '1080p' ? { ideal: 1920 } : { ideal: 1280 },
+            height: resolution === '1080p' ? { ideal: 1080 } : { ideal: 720 },
             frameRate: { ideal: fps },
           },
           audio: true,
         };
-
-        let s;
-        try {
-           s = await navigator.mediaDevices.getUserMedia(constraints);
-        } catch (initialErr) {
-           console.warn("Initial constraints failed, falling back to basic constraints", initialErr);
-           constraints = { video: { facingMode: isFrontCamera ? 'user' : 'environment' }, audio: true };
-           s = await navigator.mediaDevices.getUserMedia(constraints);
-        }
+        const s = await navigator.mediaDevices.getUserMedia(constraints);
 
         currentStream = s;
         setStream(s);
@@ -126,28 +117,7 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
     };
   }, [isFrontCamera, resolution, fps, assignedAngle]);
 
-  // MJPEG Fallback Broadcaster
-  useEffect(() => {
-    let interval: any;
-    if (stream && videoRef.current) {
-      const hiddenCanvas = document.createElement('canvas');
-      hiddenCanvas.width = 640;
-      hiddenCanvas.height = 360;
-      const ctx = hiddenCanvas.getContext('2d');
-      
-      interval = setInterval(() => {
-        if (ctx && videoRef.current && videoRef.current.videoWidth > 0) {
-          ctx.drawImage(videoRef.current, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
-          const frameDataUrl = hiddenCanvas.toDataURL('image/jpeg', 0.5);
-          // Broadcast to all switchers via signaling server
-          webrtcService.send({ type: 'frame-sync', frameDataUrl });
-        }
-      }, 150); // ~6-7 FPS
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    }
-  }, [stream]);
+ 
 
   // Battery & Thermal simulator
   useEffect(() => {
