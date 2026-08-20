@@ -379,11 +379,11 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
                   }}
                   width={640}
                   height={360}
-                  className={`w-full h-full object-cover cursor-pointer absolute inset-0 ${cam.isPhysical && cam.stream ? 'hidden' : ''}`}
+                  className={`w-full h-full object-contain cursor-pointer absolute inset-0 ${cam.isPhysical && cam.stream ? 'hidden' : ''}`}
                   onClick={() => onSelectPreview(cam.id)}
                 />
                 {cam.isPhysical && cam.fallbackFrame && (!cam.stream || (cameraStats[cam.id]?.bytesReceived || 0) === 0) && (
-                  <img src={cam.fallbackFrame} className="w-full h-full object-cover cursor-pointer absolute inset-0 z-20" onClick={() => onSelectPreview(cam.id)} />
+                  <img src={cam.fallbackFrame} className="w-full h-full object-contain cursor-pointer absolute inset-0 z-20" onClick={() => onSelectPreview(cam.id)} />
                 )}
                 {cam.isPhysical && (
                   <video
@@ -402,7 +402,7 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
                     autoPlay
                     playsInline
                     muted
-                    className="w-full h-full object-cover cursor-pointer absolute inset-0"
+                    className="w-full h-full object-contain cursor-pointer absolute inset-0"
                     onClick={() => onSelectPreview(cam.id)}
                   />
                 )}
@@ -439,7 +439,7 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
                     }}
                     width={640}
                     height={360}
-                    className="w-full h-full object-cover pointer-events-none absolute inset-0 z-10"
+                    className="w-full h-full object-contain pointer-events-none absolute inset-0 z-10"
                   />
                 )}
 

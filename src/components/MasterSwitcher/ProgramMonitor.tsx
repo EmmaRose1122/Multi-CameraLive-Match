@@ -82,7 +82,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switche
           programCamera.isPhysical ? (
             <>
             {programCamera.fallbackFrame && (
-              <img src={programCamera.fallbackFrame} className="absolute inset-0 w-full h-full object-cover" style={{ zIndex: (!programCamera.stream || !videoRef.current || videoRef.current.readyState < 2) ? 10 : -1 }} />
+              <img src={programCamera.fallbackFrame} className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: (!programCamera.stream || !videoRef.current || videoRef.current.readyState < 2) ? 10 : -1 }} />
             )}
             <video
               ref={(el) => {
@@ -93,7 +93,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switche
                    el.play().catch(e => console.error('PGM play error:', e));
                 }
               }}
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full object-contain"
               autoPlay
               playsInline
               muted
@@ -118,7 +118,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switche
               }}
               width={640}
               height={360}
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full object-contain"
              />
           )
         ) : (
@@ -137,7 +137,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switche
           `}>
              <video
               ref={pipVideoRef}
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full object-contain"
               autoPlay
               playsInline
               muted
@@ -149,7 +149,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switche
           ref={overlayCanvasRef}
           width={1280}
           height={720}
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none z-20"
+          className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20"
         />
       </div>
     </div>

@@ -59,17 +59,32 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
         return;
       }
       try {
-        const constraints: MediaStreamConstraints = {
+        const isPortrait = window.innerHeight > window.innerWidth;
+        const idealW = resolution === '1080p' ? 1920 : 1280;
+        const idealH = resolution === '1080p' ? 1080 : 720;
+        
+        // Remove strict width/height to let the device naturally orient the sensor,
+        // but prefer the highest resolution available that matches the target.
+        // Just specify the ideal largest dimension.
+        // Let the browser automatically determine the best aspect ratio based on phone orientation.
+        let constraints: MediaStreamConstraints = {
           video: {
             facingMode: isFrontCamera ? 'user' : 'environment',
-            width: resolution === '1080p' ? { ideal: 1920 } : { ideal: 1280 },
-            height: resolution === '1080p' ? { ideal: 1080 } : { ideal: 720 },
+            width: { ideal: resolution === '1080p' ? 1920 : 1280 },
             frameRate: { ideal: fps },
           },
           audio: true,
         };
 
-        const s = await navigator.mediaDevices.getUserMedia(constraints);
+        let s;
+        try {
+           s = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (initialErr) {
+           console.warn("Initial constraints failed, falling back to basic constraints", initialErr);
+           constraints = { video: { facingMode: isFrontCamera ? 'user' : 'environment' }, audio: true };
+           s = await navigator.mediaDevices.getUserMedia(constraints);
+        }
+
         currentStream = s;
         setStream(s);
         if (videoRef.current) {
@@ -225,6 +240,7 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
       {/* Main Camera Video Surface */}
       <div className="flex-1 w-full h-full relative bg-slate-950 flex items-center justify-center">
         {stream ? (
+          <>
           <video
             ref={(el) => {
               videoRef.current = el;
@@ -236,8 +252,14 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
           />
+          <div className="absolute top-16 left-0 right-0 flex justify-center pointer-events-none z-10">
+             <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full text-white/70 text-[10px] font-medium border border-white/10 shadow-lg flex items-center gap-2">
+                <span>⚠️ If video is upside down, turn ON Auto-Rotate on your phone</span>
+             </div>
+          </div>
+          </>
         ) : (
           <div className="flex flex-col items-center gap-3 p-6 text-center">
             <Camera className="w-12 h-12 text-sky-400 animate-pulse" />
