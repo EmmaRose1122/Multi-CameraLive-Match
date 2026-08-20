@@ -263,7 +263,7 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
       </div>
 
       {/* Multiview Tiles Grid */}
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-3.5">
         {cameras.map((cam, idx) => {
           const isPgm = switcherState.programCameraId === cam.id;
           const isPvw = switcherState.previewCameraId === cam.id;
@@ -382,8 +382,8 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
                   className={`w-full h-full object-cover cursor-pointer absolute inset-0 ${cam.isPhysical && cam.stream ? 'hidden' : ''}`}
                   onClick={() => onSelectPreview(cam.id)}
                 />
-                {cam.isPhysical && !cam.stream && cam.fallbackFrame && (
-                  <img src={cam.fallbackFrame} className="w-full h-full object-cover cursor-pointer absolute inset-0" onClick={() => onSelectPreview(cam.id)} />
+                {cam.isPhysical && cam.fallbackFrame && (!cam.stream || (cameraStats[cam.id]?.bytesReceived || 0) === 0) && (
+                  <img src={cam.fallbackFrame} className="w-full h-full object-cover cursor-pointer absolute inset-0 z-20" onClick={() => onSelectPreview(cam.id)} />
                 )}
                 {cam.isPhysical && (
                   <video
@@ -491,7 +491,7 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
               </div>
 
               {/* Action Buttons Footer */}
-              <div className="px-2.5 py-2 bg-black/40 border-t border-white/10 flex items-center justify-between gap-2">
+              <div className="px-2.5 py-2 bg-black/40 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 overflow-hidden">
                 <div className="flex items-center gap-1">
                   {/* Remote Flashlight / Torch */}
                   <button

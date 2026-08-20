@@ -81,8 +81,8 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switche
         {programCamera ? (
           programCamera.isPhysical ? (
             <>
-            {!programCamera.stream && programCamera.fallbackFrame && (
-              <img src={programCamera.fallbackFrame} className="absolute inset-0 w-full h-full object-cover" />
+            {programCamera.fallbackFrame && (
+              <img src={programCamera.fallbackFrame} className="absolute inset-0 w-full h-full object-cover" style={{ zIndex: (!programCamera.stream || !videoRef.current || videoRef.current.readyState < 2) ? 10 : -1 }} />
             )}
             <video
               ref={(el) => {

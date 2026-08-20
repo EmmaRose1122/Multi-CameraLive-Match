@@ -222,7 +222,13 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
       <div className="flex-1 w-full h-full relative bg-slate-950 flex items-center justify-center">
         {stream ? (
           <video
-            ref={videoRef}
+            ref={(el) => {
+              videoRef.current = el;
+              if (el && stream && el.srcObject !== stream) {
+                el.srcObject = stream;
+                el.play().catch(e => console.error("Mobile cam play error:", e));
+              }
+            }}
             autoPlay
             playsInline
             muted
@@ -249,7 +255,7 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
       </div>
 
       {/* Bottom Camera Operator Controls */}
-      <div className="absolute bottom-0 inset-x-0 z-20 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 flex items-center justify-between gap-3">
+      <div className="absolute bottom-0 inset-x-0 z-20 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 flex flex-wrap items-center justify-center sm:justify-between gap-3">
         {/* Left: Resolution & FPS */}
         <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md p-1 rounded-xl border border-slate-700 text-xs">
           <button

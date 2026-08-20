@@ -292,7 +292,11 @@ export class WebRTCService {
       console.log('--- WEBRTC ONTRACK RECEIVED (answer) ---', event.streams);
       if (event.streams && event.streams[0]) {
         const cb = this.onRemoteStreamCallbacks.get(senderId);
-        if (cb) cb(event.streams[0]);
+        if (cb) {
+           // Wait a tiny bit for ICE connection to establish before showing video stream 
+           // otherwise the video element hides the MJPEG fallback immediately.
+           setTimeout(() => cb(event.streams[0]), 500);
+        }
       }
     };
 
@@ -370,7 +374,7 @@ export class WebRTCService {
     });
   }
 
-  private send(msg: any) {
+  public send(msg: any) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
     }
