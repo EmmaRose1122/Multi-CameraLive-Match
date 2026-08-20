@@ -281,7 +281,7 @@ export const InstantReplayDeck: React.FC<InstantReplayDeckProps> = ({
     <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-4 shadow-2xl select-none flex flex-col gap-3.5">
       {/* Title & Buffer Health */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <RotateCcw className="w-4 h-4 text-red-400" />
           <h2 className="text-sm font-semibold text-white uppercase tracking-tight">
             RAM Rolling Instant Replay Deck (Zero Flash Wear)
@@ -307,7 +307,7 @@ export const InstantReplayDeck: React.FC<InstantReplayDeckProps> = ({
       </div>
 
       {/* Broadcast Replay Transition Effect Stinger Control Bar */}
-      <div className="bg-gradient-to-r from-red-950/40 via-black/50 to-sky-950/40 p-3 rounded-xl border border-white/10 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
+      <div className="bg-gradient-to-r from-red-950/40 via-black/50 to-sky-950/40 p-3 rounded-xl border border-white/10 flex flex-col sm:flex-row flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-bold text-white/50 uppercase tracking-wider flex items-center gap-1">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -361,7 +361,7 @@ export const InstantReplayDeck: React.FC<InstantReplayDeckProps> = ({
         </div>
 
         {/* Transition Duration & Test Trigger */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 bg-black/50 p-1 rounded-lg border border-white/10">
             <span className="text-[10px] text-white/40 font-mono px-1">Dur:</span>
             {[350, 450, 700].map((ms) => (
@@ -393,10 +393,10 @@ export const InstantReplayDeck: React.FC<InstantReplayDeckProps> = ({
       </div>
 
       {/* Main Control Row */}
-      <div className="bg-black/40 backdrop-blur-md p-3.5 rounded-xl border border-white/10 flex flex-col lg:flex-row items-center justify-between gap-3">
+      <div className="bg-black/40 backdrop-blur-md p-3.5 rounded-xl border border-white/10 flex flex-col sm:flex-row flex-wrap items-center justify-between gap-3">
         {/* Speed Controls */}
         <div className="flex flex-col gap-1 w-full lg:w-auto">
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs font-bold text-white/40 mr-1">Speed:</span>
             {[0.25, 0.5, 0.75, 1.0].map((spd) => (
               <button

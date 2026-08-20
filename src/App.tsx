@@ -26,6 +26,7 @@ import { webrtcService } from './services/webrtcService';
 import { googleDriveService } from './services/googleDriveService';
 
 export default function App() {
+  useEffect(() => { if (activeTab === 'camera') window.__hasStartedCamera = true; }, [activeTab]);
   // Navigation & Role Modes
   const [activeTab, setActiveTab] = useState<'switcher' | 'camera' | 'multiview' | 'apk-guide'>(() => {
     if (typeof window !== 'undefined') {
@@ -401,16 +402,7 @@ export default function App() {
     setIsDriveModalOpen(true);
   };
 
-  if (activeTab === 'camera') {
-    return (
-      <div className="min-h-screen bg-black text-[#E2E8F0] flex flex-col font-sans selection:bg-red-500 selection:text-white">
-        <MobileCameraTransmitter
-          onBackToSwitcher={() => {}} // Disabled for camera feed view isolation
-          assignedAngle={typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('angle') as any) || 'left-goal' : 'left-goal'}
-        />
-      </div>
-    );
-  }
+  // Removed early return for camera to keep studio mounted
 
   return (
     <div className="min-h-screen bg-[#0B0D11] text-[#E2E8F0] flex flex-col font-sans relative selection:bg-red-500 selection:text-white">
@@ -431,7 +423,22 @@ export default function App() {
       />
 
       {/* View Switcher based on Active Tab */}
-      <main className="flex-1 w-full mx-auto p-3 sm:p-4 flex flex-col gap-4 max-w-[1400px]">
+      
+      {/* The Camera Node - Keeps running in background if started */}
+      {(activeTab === 'camera' || (typeof window !== 'undefined' && window.__hasStartedCamera)) && (
+        <div className={activeTab === 'camera' ? 'flex-1 flex flex-col h-screen absolute inset-0 z-[100] bg-black' : 'hidden'}>
+          <MobileCameraTransmitter
+            onBackToSwitcher={() => setActiveTab('switcher')}
+            assignedAngle={typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('angle') as any) || 'left-goal' : 'left-goal'}
+          />
+          {activeTab === 'camera' && (
+            <button onClick={() => setActiveTab('switcher')} className="absolute top-4 left-4 z-50 bg-red-600 px-4 py-2 rounded font-bold">
+              ← Back to Studio
+            </button>
+          )}
+        </div>
+      )}
+      <main className={"flex-1 w-full mx-auto p-3 sm:p-4 flex flex-col gap-4 max-w-[1400px] " + (activeTab === 'camera' ? 'hidden' : '')}>
         {activeTab === 'switcher' && (
           <div className="flex flex-col lg:flex-row gap-4">
             {/* Left Column: Multiview Production Grid (4 Cameras) */}

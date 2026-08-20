@@ -137,8 +137,8 @@ export const RtmpYouTubeBroadcaster: React.FC<RtmpYouTubeBroadcasterProps> = ({
   return (
     <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-4 shadow-2xl select-none flex flex-col gap-4">
       {/* Title Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <Youtube className="w-4 h-4 text-red-500" />
           <h2 className="text-sm font-semibold text-white uppercase tracking-tight">
             YouTube Live RTMP Broadcaster & Ingestion Engine
@@ -146,7 +146,7 @@ export const RtmpYouTubeBroadcaster: React.FC<RtmpYouTubeBroadcasterProps> = ({
         </div>
 
         {/* Live Stream Pill */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {rtmpConfig.isLive ? (
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-red-950/80 text-red-400 border border-red-500/40 text-xs font-bold shadow-lg shadow-red-900/30 animate-pulse">
               <Radio className="w-3.5 h-3.5" />
@@ -276,7 +276,7 @@ export const RtmpYouTubeBroadcaster: React.FC<RtmpYouTubeBroadcasterProps> = ({
         {/* Right Column: Live YouTube Chat & Viewer Interaction (5 cols) */}
         <div className="lg:col-span-5 bg-black/40 backdrop-blur-md p-3.5 rounded-xl border border-white/10 flex flex-col justify-between h-[320px]">
           {/* Chat Header */}
-          <div className="flex items-center justify-between pb-2 border-b border-white/10 text-xs">
+          <div className="flex flex-wrap items-center justify-between pb-2 border-b border-white/10 text-xs">
             <div className="flex items-center gap-1.5 text-white font-bold">
               <MessageSquare className="w-3.5 h-3.5 text-red-500" />
               <span>YouTube Live Chat</span>
@@ -298,7 +298,7 @@ export const RtmpYouTubeBroadcaster: React.FC<RtmpYouTubeBroadcasterProps> = ({
                     : 'bg-white/5 border-white/5'
                 }`}
               >
-                <div className="flex items-center justify-between text-[10px]">
+                <div className="flex flex-wrap items-center justify-between text-[10px]">
                   <span className="font-bold text-white flex items-center gap-1.5">
                     <span
                       className="w-2 h-2 rounded-full"

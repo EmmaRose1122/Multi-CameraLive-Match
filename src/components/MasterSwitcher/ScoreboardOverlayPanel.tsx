@@ -203,8 +203,8 @@ export const ScoreboardOverlayPanel: React.FC<ScoreboardOverlayPanelProps> = ({
   return (
     <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-4 shadow-2xl select-none flex flex-col gap-4">
       {/* Title */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <Trophy className="w-4 h-4 text-amber-400" />
           <h2 className="text-sm font-semibold text-white uppercase tracking-tight">
             Live Scoreboard & Graphics Overlay Desk
@@ -229,7 +229,7 @@ export const ScoreboardOverlayPanel: React.FC<ScoreboardOverlayPanelProps> = ({
       {/* Row 1: Match Clock Engine */}
       <div className="bg-black/40 backdrop-blur-md p-3 rounded-xl border border-white/10 flex flex-col md:flex-row items-center justify-between gap-3">
         {/* Big Digital Clock Display */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="bg-black/60 px-4 py-2 rounded-lg border border-white/10 flex items-center gap-2 font-mono text-2xl font-black text-sky-400 shadow-inner">
             <Clock className="w-5 h-5 text-sky-400" />
             <span>{timeStr}</span>
@@ -239,7 +239,7 @@ export const ScoreboardOverlayPanel: React.FC<ScoreboardOverlayPanelProps> = ({
           </div>
 
           {/* Start/Pause/Reset */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               id="btn-toggle-match-clock"
               onClick={toggleClock}
@@ -283,11 +283,11 @@ export const ScoreboardOverlayPanel: React.FC<ScoreboardOverlayPanelProps> = ({
       </div>
 
       {/* Row 2: Teams & Live Score Adjusters */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="flex flex-col gap-3">
         {/* HOME TEAM */}
         <div className="bg-black/40 backdrop-blur-md p-3 rounded-xl border border-white/10 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="w-3.5 h-3.5 rounded-md bg-sky-500 shadow-sm"></span>
               <input
                 type="text"
@@ -303,7 +303,7 @@ export const ScoreboardOverlayPanel: React.FC<ScoreboardOverlayPanelProps> = ({
             </div>
 
             {/* Score Stepper */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 onClick={() =>
                   setScoreboard((p) => ({
@@ -352,8 +352,8 @@ export const ScoreboardOverlayPanel: React.FC<ScoreboardOverlayPanelProps> = ({
 
         {/* AWAY TEAM */}
         <div className="bg-black/40 backdrop-blur-md p-3 rounded-xl border border-white/10 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="w-3.5 h-3.5 rounded-md bg-rose-500 shadow-sm"></span>
               <input
                 type="text"
@@ -369,7 +369,7 @@ export const ScoreboardOverlayPanel: React.FC<ScoreboardOverlayPanelProps> = ({
             </div>
 
             {/* Score Stepper */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 onClick={() =>
                   setScoreboard((p) => ({
@@ -420,7 +420,7 @@ export const ScoreboardOverlayPanel: React.FC<ScoreboardOverlayPanelProps> = ({
       {/* Row 3: Special Broadcast Badges (VAR, Stoppage, Scoreboard Theme) */}
       <div className="bg-black/40 backdrop-blur-md p-3 rounded-xl border border-white/10 flex flex-wrap items-center justify-between gap-3">
         {/* Quick Popups */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             id="btn-trigger-var"
             onClick={triggerVarReview}
@@ -449,7 +449,7 @@ export const ScoreboardOverlayPanel: React.FC<ScoreboardOverlayPanelProps> = ({
         </div>
 
         {/* Scoreboard Broadcast Theme Selector */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Palette className="w-4 h-4 text-purple-400" />
           <span className="text-xs font-bold text-white/40">Theme:</span>
           {(
@@ -476,8 +476,8 @@ export const ScoreboardOverlayPanel: React.FC<ScoreboardOverlayPanelProps> = ({
 
       {/* Row 4: Interactive Lower Third Editor */}
       <div className="bg-black/40 backdrop-blur-md p-3 rounded-xl border border-white/10 flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-           <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between">
+           <div className="flex flex-wrap items-center gap-2">
              <Type className="w-4 h-4 text-emerald-400" />
              <span className="text-xs font-bold text-white uppercase tracking-tight">Custom Lower Third Engine</span>
            </div>
