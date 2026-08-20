@@ -93,8 +93,17 @@ export class WebRTCService {
         if (onInitialConnect) onInitialConnect(this.clientId);
         break;
 
-      case 'node-list-updated':
       case 'node-disconnected':
+        if (msg.nodeId) {
+          const pc = this.peerConnections.get(msg.nodeId);
+          if (pc) {
+            try { pc.close(); } catch (e) {}
+            this.peerConnections.delete(msg.nodeId);
+          }
+          this.iceCandidateQueues.delete(msg.nodeId);
+          this.onRemoteStreamCallbacks.delete(msg.nodeId);
+          this.remoteStreams.delete(msg.nodeId);
+        }
         if (this.onNodesUpdatedCallback) {
           this.onNodesUpdatedCallback(msg.nodes || []);
         }
@@ -294,7 +303,24 @@ export class WebRTCService {
     });
   }
 
+  private remoteStreams = new Map<string, MediaStream>();
+
   public callCameraNode(nodeId: string, onRemoteStream: (stream: MediaStream) => void) {
+    const existingPc = this.peerConnections.get(nodeId);
+    if (existingPc) {
+      if (existingPc.signalingState === 'have-local-offer') {
+        // Offer is already pending
+        return;
+      }
+      if (existingPc.connectionState === 'connected' && existingPc.signalingState === 'stable') {
+        // Already connected
+        return;
+      }
+      try {
+        existingPc.close();
+      } catch (e) {}
+    }
+
     const pc = new RTCPeerConnection(this.rtcConfig);
     this.peerConnections.set(nodeId, pc);
     this.onRemoteStreamCallbacks.set(nodeId, onRemoteStream);
@@ -323,10 +349,26 @@ export class WebRTCService {
 
     pc.ontrack = (event) => {
       console.log('[WebRTC] ontrack received on switcher for node:', nodeId, event.track.kind, event.streams);
-      let stream = (event.streams && event.streams[0]) ? event.streams[0] : null;
+      let stream = this.remoteStreams.get(nodeId);
       if (!stream) {
-        stream = new MediaStream([event.track]);
+        stream = new MediaStream();
+        this.remoteStreams.set(nodeId, stream);
       }
+      
+      // Remove any existing track of the same kind if obsolete
+      const existingTrack = stream.getTracks().find(t => t.kind === event.track.kind);
+      if (existingTrack && existingTrack.id !== event.track.id) {
+        stream.removeTrack(existingTrack);
+      }
+      if (!stream.getTracks().some(t => t.id === event.track.id)) {
+        stream.addTrack(event.track);
+      }
+      
+      event.track.onunmute = () => {
+        console.log(`[WebRTC] Track unmuted for ${nodeId} (${event.track.kind})`);
+        onRemoteStream(stream!);
+      };
+
       onRemoteStream(stream);
     };
 
@@ -334,8 +376,9 @@ export class WebRTCService {
       offerToReceiveVideo: true,
       offerToReceiveAudio: true,
     })
-      .then((offer) => pc.setLocalDescription(offer))
-      .then(() => {
+      .then(async (offer) => {
+        if (pc.signalingState === 'closed') return;
+        await pc.setLocalDescription(offer);
         this.send({
           type: 'webrtc-offer',
           targetId: nodeId,
@@ -346,8 +389,16 @@ export class WebRTCService {
   }
 
   private async handleRemoteOffer(senderId: string, offer: RTCSessionDescriptionInit) {
-    const pc = new RTCPeerConnection(this.rtcConfig);
-    this.peerConnections.set(senderId, pc);
+    let pc = this.peerConnections.get(senderId);
+    if (pc && pc.signalingState !== 'stable') {
+      try { pc.close(); } catch (e) {}
+      pc = undefined;
+    }
+
+    if (!pc) {
+      pc = new RTCPeerConnection(this.rtcConfig);
+      this.peerConnections.set(senderId, pc);
+    }
 
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => pc.addTrack(track, this.localStream!));
@@ -375,10 +426,11 @@ export class WebRTCService {
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       if (this.iceCandidateQueues.has(senderId)) {
-        for (const cand of this.iceCandidateQueues.get(senderId)!) {
+        const queue = this.iceCandidateQueues.get(senderId) || [];
+        this.iceCandidateQueues.delete(senderId);
+        for (const cand of queue) {
           try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
         }
-        this.iceCandidateQueues.delete(senderId);
       }
       
       const answer = await pc.createAnswer();
@@ -395,18 +447,28 @@ export class WebRTCService {
 
   private async handleRemoteAnswer(senderId: string, answer: RTCSessionDescriptionInit) {
     const pc = this.peerConnections.get(senderId);
-    if (pc) {
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        if (this.iceCandidateQueues.has(senderId)) {
-          for (const cand of this.iceCandidateQueues.get(senderId)) {
-            try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
-          }
-          this.iceCandidateQueues.delete(senderId);
+    if (!pc) {
+      console.warn(`[WebRTC] Received answer from unknown peer ${senderId}`);
+      return;
+    }
+
+    // Only set remote description for answer if in 'have-local-offer' state
+    if (pc.signalingState !== 'have-local-offer') {
+      console.warn(`[WebRTC] Skipping remote answer from ${senderId} because signalingState is '${pc.signalingState}' (expected 'have-local-offer')`);
+      return;
+    }
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      if (this.iceCandidateQueues.has(senderId)) {
+        const queue = this.iceCandidateQueues.get(senderId) || [];
+        this.iceCandidateQueues.delete(senderId);
+        for (const cand of queue) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
         }
-      } catch (e) {
-        console.error('Error handling answer', e);
       }
+    } catch (e) {
+      console.error('Error handling answer', e);
     }
   }
 

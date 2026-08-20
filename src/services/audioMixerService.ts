@@ -202,6 +202,15 @@ class AudioMixerService {
     }
   }
 
+  public async resumeContext() {
+    this.init();
+    if (this.ctx && this.ctx.state === 'suspended') {
+      try {
+        await this.ctx.resume();
+      } catch (e) {}
+    }
+  }
+
   public registerCameraNode(nodeId: string, name: string, angle: CameraAngle, stream: MediaStream | null) {
     this.init();
 
@@ -295,22 +304,34 @@ class AudioMixerService {
       this.channels.set(nodeId, dsp);
     }
 
-    // Connect stream if available
-    if (stream && stream.getAudioTracks().length > 0) {
-      try {
-        if (dsp.sourceNode) {
-          dsp.sourceNode.disconnect();
-        }
-        dsp.sourceNode = this.ctx.createMediaStreamSource(stream);
-        dsp.sourceNode.connect(dsp.eqLow);
-        dsp.stream = stream;
-        
-        const state = this.channelStates.get(nodeId);
-        if (state) state.isAudioPresent = true;
-      } catch (e) {
-        console.warn('Error attaching media stream to audio mixer channel:', e);
+    // Connect stream if audio tracks are available
+    const hasAudioTracks = !!(stream && stream.getAudioTracks().length > 0);
+    const channelState = this.channelStates.get(nodeId);
+    if (channelState) channelState.isAudioPresent = hasAudioTracks;
+
+    if (hasAudioTracks && stream) {
+      if (dsp.synthSourceNode) {
+        try {
+          (dsp.synthSourceNode as any).stop?.();
+          dsp.synthSourceNode.disconnect();
+        } catch (e) {}
+        dsp.synthSourceNode = null;
       }
-    } else {
+
+      // Only recreate MediaStreamSourceNode if stream actually changed
+      if (!dsp.sourceNode || dsp.stream !== stream) {
+        try {
+          if (dsp.sourceNode) {
+            dsp.sourceNode.disconnect();
+          }
+          dsp.sourceNode = this.ctx.createMediaStreamSource(stream);
+          dsp.sourceNode.connect(dsp.eqLow);
+          dsp.stream = stream;
+        } catch (e) {
+          console.warn('Error attaching media stream to audio mixer channel:', e);
+        }
+      }
+    } else if (!hasAudioTracks && !dsp.sourceNode) {
       // Connect pitch-side simulated mic ambience (whistle, ball kick resonance, crowd focus)
       if (!dsp.synthSourceNode) {
         try {

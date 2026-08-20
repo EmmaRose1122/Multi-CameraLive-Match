@@ -42,7 +42,7 @@ export const RemoteCameraFleetModal: React.FC<RemoteCameraFleetModalProps> = ({
   useEffect(() => {
     setPairUrl(`${window.location.origin}/?mode=camera&angle=${selectedAngle}`);
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      console.log('TYPE OF WINDOW FETCH', typeof window.fetch); window.fetch('/api/network-info')
+      fetch('/api/network-info')
         .then(res => res.json())
         .then(data => {
            if (data.localIps && data.localIps.length > 0) {

@@ -202,12 +202,18 @@ export default function App() {
         // Track new nodes we need to call
         const nodesToCall: string[] = [];
         // Keep track of nodes we are currently calling so we don't spam offers
-        const callingNodes = (window as any).callingNodes || new Set<string>();
-        (window as any).callingNodes = callingNodes;
+        const activeCallingSet: Set<string> = (window as any).__callingNodeIds || new Set<string>();
+        (window as any).__callingNodeIds = activeCallingSet;
+
+        // Prune disconnected nodes from activeCallingSet
+        const remoteIds = new Set(nodes.map(n => n.id));
+        activeCallingSet.forEach(id => {
+          if (!remoteIds.has(id)) activeCallingSet.delete(id);
+        });
 
         nodes.forEach((n) => {
           if (n.role === 'camera' && n.id !== webrtcService.getClientId()) {
-            const isNewOrNoStream = (!existingMap.has(n.id) || !existingMap.get(n.id)?.stream) && !callingNodes.has(n.id);
+            const isNewOrNoStream = (!existingMap.has(n.id) || !existingMap.get(n.id)?.stream) && !activeCallingSet.has(n.id);
             
             if (existingMap.has(n.id)) {
               const existing = existingMap.get(n.id)!;
@@ -243,36 +249,38 @@ export default function App() {
             }
             
             if (isNewOrNoStream) {
+              activeCallingSet.add(n.id);
               nodesToCall.push(n.id);
             }
           }
         });
 
         // Fire callCameraNode for new nodes outside of the setState map loop
-        setTimeout(() => {
-          nodesToCall.forEach(nodeId => {
-             callingNodes.add(nodeId);
-             webrtcService.callCameraNode(nodeId, (remoteStream) => {
-                console.log('[DEBUG] App.tsx received remote stream for nodeId:', nodeId, remoteStream.getTracks());
-                setCameras((currentCameras) => {
-                  const updated = currentCameras.map(cam => 
-                    cam.id === nodeId ? { ...cam, stream: remoteStream } : cam
-                  );
-                  // Auto-select camera if nothing selected
-                  setSwitcherState(s => {
-                    if (updated.length > 0) {
-                      const firstId = updated[0].id;
-                      if (!updated.find(c => c.id === s.programCameraId)) {
-                        return { ...s, programCameraId: firstId, previewCameraId: updated.length > 1 ? updated[1].id : firstId };
+        if (nodesToCall.length > 0) {
+          setTimeout(() => {
+            nodesToCall.forEach(nodeId => {
+               webrtcService.callCameraNode(nodeId, (remoteStream) => {
+                  console.log('[WebRTC] App received remote stream for nodeId:', nodeId, remoteStream.getTracks());
+                  setCameras((currentCameras) => {
+                    const updated = currentCameras.map(cam => 
+                      cam.id === nodeId ? { ...cam, stream: remoteStream } : cam
+                    );
+                    // Auto-select camera if nothing selected
+                    setSwitcherState(s => {
+                      if (updated.length > 0) {
+                        const firstId = updated[0].id;
+                        if (!updated.find(c => c.id === s.programCameraId)) {
+                          return { ...s, programCameraId: firstId, previewCameraId: updated.length > 1 ? updated[1].id : firstId };
+                        }
                       }
-                    }
-                    return s;
+                      return s;
+                    });
+                    return updated;
                   });
-                  return updated;
-                });
-             });
-          });
-        }, 100);
+               });
+            });
+          }, 100);
+        }
 
         const newCameras = Array.from(existingMap.values());
         // Also auto-select on initial connect before stream arrives
