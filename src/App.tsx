@@ -432,7 +432,7 @@ export default function App() {
             onBackToSwitcher={() => setActiveTab('switcher')}
             assignedAngle={typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('angle') as any) || 'left-goal' : 'left-goal'}
           />
-          {activeTab === 'camera' && (
+          {activeTab === 'camera' && (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') !== 'camera') && (
             <button onClick={() => setActiveTab('switcher')} className="absolute top-4 left-4 z-50 bg-red-600 px-4 py-2 rounded font-bold">
               ← Back to Studio
             </button>

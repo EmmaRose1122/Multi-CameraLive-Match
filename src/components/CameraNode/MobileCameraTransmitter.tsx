@@ -54,6 +54,10 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
     let currentStream: MediaStream | null = null;
 
     async function startCam() {
+      if (!navigator.mediaDevices) {
+        setErrorMsg('Camera access requires HTTPS or localhost. Please use a secure URL (https://...)');
+        return;
+      }
       try {
         const constraints: MediaStreamConstraints = {
           video: {

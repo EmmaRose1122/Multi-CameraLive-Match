@@ -37,7 +37,21 @@ export const RemoteCameraFleetModal: React.FC<RemoteCameraFleetModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [selectedAngle, setSelectedAngle] = useState<'left-goal' | 'right-goal' | 'center' | 'tactical'>('left-goal');
 
-  const pairUrl = `${window.location.origin}/?mode=camera&angle=${selectedAngle}`;
+  const [pairUrl, setPairUrl] = useState(`${window.location.origin}/?mode=camera&angle=${selectedAngle}`);
+
+  useEffect(() => {
+    setPairUrl(`${window.location.origin}/?mode=camera&angle=${selectedAngle}`);
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      fetch('/api/network-info')
+        .then(res => res.json())
+        .then(data => {
+           if (data.localIps && data.localIps.length > 0) {
+             setPairUrl(`http://${data.localIps[0]}:${data.port}/?mode=camera&angle=${selectedAngle}`);
+           }
+        })
+        .catch(console.error);
+    }
+  }, [selectedAngle]);
 
   useEffect(() => {
     if (isOpen) {
@@ -112,9 +126,16 @@ export const RemoteCameraFleetModal: React.FC<RemoteCameraFleetModalProps> = ({
           {/* Pair via QR Code Section */}
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col md:flex-row items-center gap-5">
             {/* QR Code Canvas */}
-            <div className="bg-white p-2.5 rounded-xl shrink-0 shadow-lg">
+            <div className="bg-white p-2.5 rounded-xl shrink-0 shadow-lg flex flex-col items-center">
               {qrCodeDataUrl ? (
-                <img src={qrCodeDataUrl} alt="Pairing QR" className="w-36 h-36" />
+                <>
+                  <img src={qrCodeDataUrl} alt="Pairing QR" className="w-36 h-36" />
+                  {pairUrl.includes('192.168') && (
+                    <div className="text-[9px] text-red-600 mt-2 font-bold max-w-[140px] text-center leading-tight">
+                      Use HTTPS URL for camera permissions!
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="w-36 h-36 flex items-center justify-center text-slate-400 text-xs">
                   Generating QR...
