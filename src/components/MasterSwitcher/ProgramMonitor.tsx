@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Volume2, VolumeX } from 'lucide-react';
 import { CameraNode, SwitcherState, ScoreboardState } from '../../types/broadcast';
 import { graphicsCompositor } from '../../services/graphicsCompositor';
 import { matchSimulator } from '../../services/simulationData';
@@ -10,6 +11,7 @@ interface ProgramMonitorProps {
 }
 
 export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switcherState, scoreboard }) => {
+  const [isMuted, setIsMuted] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const pipVideoRef = useRef<HTMLVideoElement>(null);
@@ -72,9 +74,18 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switche
           <span className="text-red-100 font-bold text-xs uppercase tracking-widest">Program Output (Live)</span>
         </div>
         {programCamera && (
-          <span className="text-white/60 font-mono text-[10px] uppercase truncate max-w-[150px]">
-            {programCamera.name}
-          </span>
+          <div className="flex items-center gap-4">
+            <span className="text-white/60 font-mono text-[10px] uppercase truncate max-w-[150px]">
+              {programCamera.name}
+            </span>
+            <button
+              onClick={() => setIsMuted(!isMuted)}
+              className={`p-1.5 rounded transition ${isMuted ? 'bg-slate-800 text-slate-400' : 'bg-red-500/20 text-red-400'}`}
+              title="Toggle Program Audio"
+            >
+              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            </button>
+          </div>
         )}
       </div>
       <div className="relative aspect-video bg-black w-full overflow-hidden">
@@ -96,7 +107,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switche
               className="absolute inset-0 w-full h-full object-contain"
               autoPlay
               playsInline
-              muted
+              muted={isMuted}
             />
             </>
           ) : (

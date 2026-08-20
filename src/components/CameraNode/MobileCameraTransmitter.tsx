@@ -31,6 +31,7 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
   const [isFrontCamera, setIsFrontCamera] = useState(false);
   const [torchActive, setTorchActive] = useState(false);
   const [screenDimmed, setScreenDimmed] = useState(false);
+  const [micMuted, setMicMuted] = useState(false);
   const [resolution, setResolution] = useState<'1080p' | '720p'>('1080p');
   const [fps, setFps] = useState<number>(60);
   const [batteryLevel, setBatteryLevel] = useState<number>(85);
@@ -118,6 +119,15 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
   }, [isFrontCamera, resolution, fps, assignedAngle]);
 
  
+
+  // Audio Mute Toggle
+  useEffect(() => {
+    if (stream) {
+      stream.getAudioTracks().forEach(track => {
+        track.enabled = !micMuted;
+      });
+    }
+  }, [micMuted, stream]);
 
   // Battery & Thermal simulator
   useEffect(() => {
@@ -278,6 +288,17 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
             <SwitchCamera className="w-5 h-5" />
           </button>
 
+          <button
+            onClick={() => setMicMuted(!micMuted)}
+            className={`p-3 rounded-full shadow-xl transition ${
+              micMuted
+                ? 'bg-rose-500 text-white'
+                : 'bg-slate-900/90 text-slate-300 border border-slate-700 hover:bg-slate-800'
+            }`}
+            title="Toggle Microphone"
+          >
+            {micMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+          </button>
           <button
             onClick={() => setTorchActive(!torchActive)}
             className={`p-3 rounded-full shadow-xl transition ${
