@@ -161,6 +161,23 @@ async function startServer() {
              break;
           }
 
+          case 'audio-chunk': {
+            // Broadcast camera live mic audio chunks to switchers
+            clients.forEach((client) => {
+              if (client.role === 'switcher' && client.ws.readyState === WebSocket.OPEN) {
+                client.ws.send(JSON.stringify({
+                  type: 'audio-chunk',
+                  senderId: clientId,
+                  pcmData: msg.pcmData,
+                  sampleRate: msg.sampleRate || 16000,
+                  peak: msg.peak || 0,
+                  timestamp: msg.timestamp || Date.now(),
+                }));
+              }
+            });
+            break;
+          }
+
           case 'ice-candidate': {
             const targetClient = clients.get(msg.targetId);
             if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {

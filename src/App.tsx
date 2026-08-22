@@ -25,6 +25,7 @@ import {
 } from './types/broadcast';
 import { webrtcService } from './services/webrtcService';
 import { googleDriveService } from './services/googleDriveService';
+import { audioMixerService } from './services/audioMixerService';
 
 export default function App() {
   // Navigation & Role Modes
@@ -141,13 +142,20 @@ export default function App() {
     }
 
     webrtcService.connect('switcher');
-    webrtcService.onRemoteFrame((nodeId, frameDataUrl) => {
+
+    webrtcService.onRemoteAudioChunk((nodeId, pcmData, sampleRate, peak) => {
+      const channelStream = audioMixerService.ingestPcmChunk(nodeId, pcmData, sampleRate, peak);
       setCameras((currentCameras) => {
         let found = false;
         const updated = currentCameras.map((cam) => {
           if (cam.id === nodeId) {
             found = true;
-            return { ...cam, fallbackFrame: frameDataUrl };
+            const needsStream = !cam.stream || cam.stream.getAudioTracks().length === 0;
+            return {
+              ...cam,
+              stream: (needsStream && channelStream) ? channelStream : cam.stream,
+              audioLevel: Math.round(peak * 100),
+            };
           }
           return cam;
         });
@@ -157,7 +165,47 @@ export default function App() {
             name: `Remote Phone Cam`,
             angle: 'custom',
             isPhysical: true,
-            stream: null,
+            stream: channelStream,
+            isConnected: true,
+            fps: 30,
+            resolution: '1080p',
+            batteryLevel: 85,
+            temperatureC: 34,
+            tallyState: 'standby',
+            torchOn: false,
+            screenDimmed: false,
+            zoomLevel: 1,
+            bitrateKbps: 5800,
+            latencyMs: 35,
+            audioLevel: Math.round(peak * 100),
+          });
+        }
+        return updated;
+      });
+    });
+
+    webrtcService.onRemoteFrame((nodeId, frameDataUrl) => {
+      setCameras((currentCameras) => {
+        let found = false;
+        const channelStream = audioMixerService.getChannelStream(nodeId);
+        const updated = currentCameras.map((cam) => {
+          if (cam.id === nodeId) {
+            found = true;
+            return {
+              ...cam,
+              fallbackFrame: frameDataUrl,
+              stream: (!cam.stream && channelStream) ? channelStream : cam.stream,
+            };
+          }
+          return cam;
+        });
+        if (!found && nodeId) {
+          updated.push({
+            id: nodeId,
+            name: `Remote Phone Cam`,
+            angle: 'custom',
+            isPhysical: true,
+            stream: channelStream,
             fallbackFrame: frameDataUrl,
             isConnected: true,
             fps: 30,
@@ -261,15 +309,21 @@ export default function App() {
             nodesToCall.forEach(nodeId => {
                webrtcService.callCameraNode(nodeId, (remoteStream) => {
                   console.log('[WebRTC] App received remote stream for nodeId:', nodeId, remoteStream.getTracks());
+                  const streamClone = new MediaStream(remoteStream.getTracks());
                   setCameras((currentCameras) => {
                     const updated = currentCameras.map(cam => 
-                      cam.id === nodeId ? { ...cam, stream: remoteStream } : cam
+                      cam.id === nodeId ? { ...cam, stream: streamClone } : cam
                     );
+                    const camObj = updated.find(c => c.id === nodeId);
+                    if (camObj) {
+                      audioMixerService.registerCameraNode(camObj.id, camObj.name, camObj.angle, streamClone);
+                    }
                     // Auto-select camera if nothing selected
                     setSwitcherState(s => {
                       if (updated.length > 0) {
                         const firstId = updated[0].id;
                         if (!updated.find(c => c.id === s.programCameraId)) {
+                          audioMixerService.updateActiveProgramCamera(firstId);
                           return { ...s, programCameraId: firstId, previewCameraId: updated.length > 1 ? updated[1].id : firstId };
                         }
                       }
@@ -318,6 +372,17 @@ export default function App() {
       })
     );
   }, [switcherState.programCameraId, switcherState.previewCameraId]);
+
+  // Synchronize camera streams and AFV into audioMixerService
+  useEffect(() => {
+    cameras.forEach((cam) => {
+      audioMixerService.registerCameraNode(cam.id, cam.name, cam.angle, cam.stream);
+    });
+  }, [cameras]);
+
+  useEffect(() => {
+    audioMixerService.updateActiveProgramCamera(switcherState.programCameraId);
+  }, [switcherState.programCameraId]);
 
   // Execute Instant CUT
   const handleExecuteCut = () => {

@@ -1,13 +1,32 @@
 <!doctype html>
 <html lang="en">
   <head>
-    
+    <script>
+      (function() {
+        try {
+          var _origFetch = typeof window !== 'undefined' && window.fetch ? window.fetch.bind(window) : undefined;
+          var _currentFetch = _origFetch;
+          Object.defineProperty(window, 'fetch', {
+            get: function() {
+              return _currentFetch || (window.fetch !== _currentFetch ? window.fetch : _origFetch);
+            },
+            set: function(val) {
+              _currentFetch = val;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (e) {
+          // ignore
+        }
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
-    <meta name="description" content="An application built with Google AI Studio." />
-    <meta property="og:title" content="My Google AI Studio App" />
-    <meta property="og:description" content="An application built with Google AI Studio." />
+    <title>Multi-Cam Live Match Studio</title>
+    <meta name="description" content="Custom multi-camera live streaming, wireless video switcher, and sports graphics overlay system." />
+    <meta property="og:title" content="Multi-Cam Live Match Studio" />
+    <meta property="og:description" content="Custom multi-camera live streaming, wireless video switcher, and sports graphics overlay system." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>

@@ -13,6 +13,7 @@ interface ProgramMonitorProps {
 
 export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switcherState, scoreboard }) => {
   const [isMuted, setIsMuted] = useState(false);
+  const [monitorVolume, setMonitorVolume] = useState(1.0);
   const [audioStarted, setAudioStarted] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -21,27 +22,41 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switche
   const programCamera = cameras.find(c => c.id === switcherState.programCameraId);
   const pipCamera = switcherState.pipEnabled ? cameras.find(c => c.id === switcherState.pipCameraId) : null;
 
-  const hasAudioTrack = !!(programCamera?.stream && programCamera.stream.getAudioTracks().length > 0);
+  const hasAudioTrack = !!(programCamera?.stream && programCamera.stream.getAudioTracks().some(t => t.readyState === 'live' || t.enabled)) || !!(programCamera && audioMixerService.getChannelState(programCamera.id)?.isAudioPresent);
 
   const handleToggleAudio = async () => {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
     setAudioStarted(true);
 
+    await audioMixerService.resumeContext();
     if (!nextMuted) {
-      await audioMixerService.resumeContext();
       audioMixerService.setMasterMute(false);
-      if (videoRef.current) {
-        videoRef.current.muted = false;
-        videoRef.current.volume = 1.0;
-        videoRef.current.play().catch(() => {});
+      audioMixerService.setMasterGain(monitorVolume, 20 * Math.log10(Math.max(0.001, monitorVolume)));
+      if (programCamera) {
+        audioMixerService.registerCameraNode(programCamera.id, programCamera.name, programCamera.angle, programCamera.stream);
+        audioMixerService.updateActiveProgramCamera(programCamera.id);
       }
     } else {
-      if (videoRef.current) {
-        videoRef.current.muted = true;
-      }
+      audioMixerService.setMasterMute(true);
     }
   };
+
+  const handleVolumeChange = (newVol: number) => {
+    setMonitorVolume(newVol);
+    audioMixerService.setMasterGain(newVol, 20 * Math.log10(Math.max(0.001, newVol)));
+  };
+
+  // Sync active program camera with mixer
+  useEffect(() => {
+    if (programCamera) {
+      audioMixerService.registerCameraNode(programCamera.id, programCamera.name, programCamera.angle, programCamera.stream);
+      audioMixerService.updateActiveProgramCamera(programCamera.id);
+      if (!isMuted) {
+        audioMixerService.resumeContext();
+      }
+    }
+  }, [programCamera?.stream, programCamera?.id, isMuted, monitorVolume]);
 
   // Handle Main PGM Video Stream
   useEffect(() => {
@@ -52,9 +67,8 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switche
         videoRef.current.srcObject = programCamera.stream;
         videoRef.current.play().catch(e => console.error('PGM play error:', e));
       }
-      videoRef.current.muted = isMuted;
     }
-  }, [programCamera?.stream, programCamera?.id, isMuted]);
+  }, [programCamera?.stream, programCamera?.id]);
 
   // Handle PiP Video Stream
   useEffect(() => {
@@ -110,31 +124,49 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switche
               hasAudioTrack ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
             }`}>
               {hasAudioTrack ? <Mic className="w-3 h-3 text-emerald-400" /> : <MicOff className="w-3 h-3 text-amber-400" />}
-              <span>{hasAudioTrack ? 'MIC LIVE' : 'SYNTH AMB'}</span>
+              <span>{hasAudioTrack ? 'MIC LIVE' : 'NO MIC'}</span>
             </span>
 
-            {/* Main Audio Monitor Toggle */}
-            <button
-              onClick={handleToggleAudio}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold transition shadow-sm ${
-                !isMuted 
-                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/50' 
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
-              }`}
-              title="Toggle Live Audio Monitoring on Main Screen"
-            >
-              {!isMuted ? (
-                <>
-                  <Volume2 className="w-3.5 h-3.5 text-white animate-pulse" />
-                  <span>AUDIO ON</span>
-                </>
-              ) : (
-                <>
-                  <VolumeX className="w-3.5 h-3.5 text-slate-400" />
-                  <span>UNMUTE AUDIO</span>
-                </>
-              )}
-            </button>
+            {/* Volume Slider & Main Audio Monitor Toggle */}
+            <div className="flex items-center gap-2 bg-black/40 px-2 py-1 rounded-lg border border-white/10">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={isMuted ? 0 : monitorVolume}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  handleVolumeChange(val);
+                  if (isMuted && val > 0) {
+                    setIsMuted(false);
+                  }
+                }}
+                className="w-16 h-1.5 accent-emerald-500 bg-slate-700 rounded-lg cursor-pointer"
+                title={`Monitor Volume: ${Math.round(monitorVolume * 100)}%`}
+              />
+              <button
+                onClick={handleToggleAudio}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold transition shadow-sm ${
+                  !isMuted 
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/50' 
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                }`}
+                title="Toggle Live Audio Monitoring on Main Screen"
+              >
+                {!isMuted ? (
+                  <>
+                    <Volume2 className="w-3.5 h-3.5 text-white animate-pulse" />
+                    <span>AUDIO ON</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="w-3.5 h-3.5 text-slate-400" />
+                    <span>UNMUTE</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -158,7 +190,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({ cameras, switche
               className="absolute inset-0 w-full h-full object-contain"
               autoPlay
               playsInline
-              muted={isMuted}
+              muted
             />
             </>
           ) : (

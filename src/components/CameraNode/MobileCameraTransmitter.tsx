@@ -34,6 +34,7 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
   const [torchActive, setTorchActive] = useState(false);
   const [screenDimmed, setScreenDimmed] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
+  const [micLevel, setMicLevel] = useState<number>(0);
   const [resolution, setResolution] = useState<'1080p' | '720p'>('1080p');
   const [fps, setFps] = useState<number>(60);
   const [batteryLevel, setBatteryLevel] = useState<number>(85);
@@ -75,7 +76,11 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
             height: resolution === '1080p' ? { ideal: 1080 } : { ideal: 720 },
             frameRate: { ideal: fps },
           },
-          audio: true,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
         };
         
         let s;
@@ -83,12 +88,24 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
           s = await navigator.mediaDevices.getUserMedia(constraints);
         } catch (initialErr) {
           console.warn("High-res constraints failed, falling back to safe constraints", initialErr);
-          constraints = { 
-            video: { facingMode: isFrontCamera ? 'user' : 'environment' }, 
-            audio: true 
-          };
-          s = await navigator.mediaDevices.getUserMedia(constraints);
+          try {
+            constraints = { 
+              video: { facingMode: isFrontCamera ? 'user' : 'environment' }, 
+              audio: true 
+            };
+            s = await navigator.mediaDevices.getUserMedia(constraints);
+          } catch (audioErr) {
+            console.warn("Audio+Video getUserMedia failed, attempting video-only", audioErr);
+            s = await navigator.mediaDevices.getUserMedia({ 
+              video: { facingMode: isFrontCamera ? 'user' : 'environment' }
+            });
+          }
         }
+
+        s.getAudioTracks().forEach((track) => {
+          track.enabled = !micMuted;
+          console.log(`[MobileCamera] Active mic track: ${track.label} (ID: ${track.id}, readyState: ${track.readyState})`);
+        });
 
         currentStream = s;
         setStream(s);
@@ -163,6 +180,69 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
       clearInterval(interval);
     };
   }, [stream]);
+
+  // Real-Time Live Microphone Metering & Audio Track Monitoring
+  useEffect(() => {
+    if (!stream) return;
+    const audioTrack = stream.getAudioTracks().find((t) => t.readyState === 'live') || stream.getAudioTracks()[0];
+    if (!audioTrack) return;
+
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+
+    let audioCtx: AudioContext | null = null;
+    let micSource: MediaStreamAudioSourceNode | null = null;
+    let analyser: AnalyserNode | null = null;
+    let animId: number | null = null;
+
+    try {
+      audioCtx = new AudioCtx();
+      const isolatedAudioStream = new MediaStream([audioTrack]);
+      micSource = audioCtx.createMediaStreamSource(isolatedAudioStream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.6;
+      micSource.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      let lastSendTime = 0;
+
+      const updateMeter = () => {
+        if (!analyser) return;
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / dataArray.length;
+        const normalized = micMuted ? 0 : Math.min(100, Math.round((avg / 128) * 100));
+        setMicLevel(normalized);
+
+        const now = Date.now();
+        if (now - lastSendTime > 100) {
+          lastSendTime = now;
+          if (!micMuted && normalized > 0) {
+            webrtcService.sendAudioChunk('', audioCtx?.sampleRate || 48000, normalized / 100);
+          }
+        }
+
+        animId = requestAnimationFrame(updateMeter);
+      };
+
+      animId = requestAnimationFrame(updateMeter);
+    } catch (e) {
+      console.warn('Error setting up mic analyser:', e);
+    }
+
+    return () => {
+      if (animId) cancelAnimationFrame(animId);
+      try {
+        if (micSource) micSource.disconnect();
+        if (analyser) analyser.disconnect();
+        if (audioCtx && audioCtx.state !== 'closed') audioCtx.close().catch(() => {});
+      } catch (e) {}
+    };
+  }, [stream, micMuted]);
 
   // Audio Mute Toggle
   useEffect(() => {
@@ -333,17 +413,28 @@ export const MobileCameraTransmitter: React.FC<MobileCameraTransmitterProps> = (
             <SwitchCamera className="w-5 h-5" />
           </button>
 
-          <button
-            onClick={() => setMicMuted(!micMuted)}
-            className={`p-3 rounded-full shadow-xl transition ${
-              micMuted
-                ? 'bg-rose-500 text-white'
-                : 'bg-slate-900/90 text-slate-300 border border-slate-700 hover:bg-slate-800'
-            }`}
-            title="Toggle Microphone"
-          >
-            {micMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-          </button>
+          <div className="flex items-center gap-1.5 bg-slate-900/90 p-1.5 rounded-full border border-slate-700">
+            <button
+              onClick={() => setMicMuted(!micMuted)}
+              className={`p-2 rounded-full shadow-xl transition ${
+                micMuted
+                  ? 'bg-rose-500 text-white'
+                  : 'bg-slate-800 text-emerald-400 hover:bg-slate-700'
+              }`}
+              title="Toggle Microphone"
+            >
+              {micMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+            {/* Live Mic Meter */}
+            <div className="w-10 h-3 bg-black/60 rounded-full overflow-hidden p-0.5 flex items-center mr-1">
+              <div
+                className={`h-full rounded-full transition-all duration-75 ${
+                  micMuted ? 'bg-slate-600' : micLevel > 70 ? 'bg-amber-400' : 'bg-emerald-400'
+                }`}
+                style={{ width: `${micMuted ? 0 : Math.max(8, micLevel)}%` }}
+              />
+            </div>
+          </div>
           <button
             onClick={() => setTorchActive(!torchActive)}
             className={`p-3 rounded-full shadow-xl transition ${

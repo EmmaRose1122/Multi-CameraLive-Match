@@ -29,6 +29,10 @@ interface ChannelDspNodes {
   analyserL: AnalyserNode;
   analyserR: AnalyserNode;
   stream: MediaStream | null;
+  audioTrackId?: string | null;
+  channelDestination: MediaStreamAudioDestinationNode | null;
+  nextPlayTime?: number;
+  lastPcmTime?: number;
 }
 
 class AudioMixerService {
@@ -59,10 +63,10 @@ class AudioMixerService {
     masterMuted: false,
     limiterEnabled: true,
     compressorEnabled: true,
-    delayMs: 40,
+    delayMs: 0,
     testTone: false,
-    stadiumAmbience: true,
-    stadiumAmbienceLevel: 0.35,
+    stadiumAmbience: false,
+    stadiumAmbienceLevel: 0,
     monitorSource: 'master',
     meterL: 0,
     meterR: 0,
@@ -77,7 +81,15 @@ class AudioMixerService {
   private isStarted = false;
 
   constructor() {
-    // Delay initialization until user gesture
+    if (typeof window !== 'undefined') {
+      const unlockAudio = () => {
+        this.resumeContext();
+      };
+      ['click', 'touchstart', 'keydown', 'pointerdown'].forEach((ev) => {
+        window.addEventListener(ev, unlockAudio, { passive: true, once: false });
+        document.addEventListener(ev, unlockAudio, { passive: true, once: false });
+      });
+    }
   }
 
   public init() {
@@ -139,9 +151,6 @@ class AudioMixerService {
       // Create destination for broadcast stream mixdown
       this.destinationNode = this.ctx.createMediaStreamDestination();
       this.masterGainNode.connect(this.destinationNode);
-
-      // Initialize Ambient Stadium Crowd Bed
-      this.initStadiumAmbience();
 
       this.isStarted = true;
       this.startMeterLoop();
@@ -225,7 +234,7 @@ class AudioMixerService {
         muted: false,
         solo: false,
         pan: angle === 'left-goal' ? -0.4 : angle === 'right-goal' ? 0.4 : 0,
-        afv: true, // Audio Follows Video default ON for broadcast
+        afv: false, // Default AFV off so all camera mics are open and audible immediately
         eqLow: 0,
         eqMid: 0,
         eqHigh: 0,
@@ -299,17 +308,21 @@ class AudioMixerService {
         analyserL,
         analyserR,
         stream: null,
+        channelDestination: null,
+        nextPlayTime: 0,
+        lastPcmTime: 0,
       };
 
       this.channels.set(nodeId, dsp);
     }
 
     // Connect stream if audio tracks are available
-    const hasAudioTracks = !!(stream && stream.getAudioTracks().length > 0);
+    const audioTrack = stream?.getAudioTracks().find((t) => t.readyState === 'live') || stream?.getAudioTracks()[0];
+    const hasAudioTracks = !!(audioTrack && audioTrack.readyState !== 'ended');
     const channelState = this.channelStates.get(nodeId);
     if (channelState) channelState.isAudioPresent = hasAudioTracks;
 
-    if (hasAudioTracks && stream) {
+    if (hasAudioTracks && audioTrack && stream) {
       if (dsp.synthSourceNode) {
         try {
           (dsp.synthSourceNode as any).stop?.();
@@ -318,33 +331,44 @@ class AudioMixerService {
         dsp.synthSourceNode = null;
       }
 
-      // Only recreate MediaStreamSourceNode if stream actually changed
-      if (!dsp.sourceNode || dsp.stream !== stream) {
+      const trackId = audioTrack.id;
+      // Re-create MediaStreamSourceNode if track or stream changed
+      if (!dsp.sourceNode || dsp.audioTrackId !== trackId || dsp.stream !== stream) {
         try {
           if (dsp.sourceNode) {
             dsp.sourceNode.disconnect();
           }
-          dsp.sourceNode = this.ctx.createMediaStreamSource(stream);
+          // Wrap in a isolated MediaStream containing only the active audio track
+          const isolatedAudioStream = new MediaStream([audioTrack]);
+          dsp.sourceNode = this.ctx.createMediaStreamSource(isolatedAudioStream);
           dsp.sourceNode.connect(dsp.eqLow);
           dsp.stream = stream;
+          dsp.audioTrackId = trackId;
+          console.log(`[AudioMixer] Attached LIVE mic track (${trackId}) for camera ${nodeId}`);
         } catch (e) {
           console.warn('Error attaching media stream to audio mixer channel:', e);
         }
       }
-    } else if (!hasAudioTracks && !dsp.sourceNode) {
-      // Connect pitch-side simulated mic ambience (whistle, ball kick resonance, crowd focus)
-      if (!dsp.synthSourceNode) {
+
+      // Add dynamic listener for track events
+      audioTrack.onunmute = () => {
+        console.log(`[AudioMixer] Track unmuted for ${nodeId}`);
+        this.registerCameraNode(nodeId, name, angle, stream);
+      };
+      audioTrack.onended = () => {
+        this.registerCameraNode(nodeId, name, angle, stream);
+      };
+      stream.onaddtrack = () => {
+        this.registerCameraNode(nodeId, name, angle, stream);
+      };
+    } else {
+      // Clear any synthetic node
+      if (dsp.synthSourceNode) {
         try {
-          const osc = this.ctx.createOscillator();
-          const oscGain = this.ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.value = 60 + Math.random() * 40; // Subtle sub thump
-          oscGain.gain.value = 0.005; // very subtle background tone
-          osc.connect(oscGain);
-          oscGain.connect(dsp.eqLow);
-          osc.start();
-          dsp.synthSourceNode = osc;
+          (dsp.synthSourceNode as any).stop?.();
+          dsp.synthSourceNode.disconnect();
         } catch (e) {}
+        dsp.synthSourceNode = null;
       }
     }
 
@@ -536,9 +560,9 @@ class AudioMixerService {
       else if (hasSolo && !state.solo) {
         effectiveGain = 0;
       }
-      // AFV rule (Audio Follows Video): if AFV is on, duck by 20dB or silence when off-air
+      // AFV rule (Audio Follows Video): if AFV is on, duck by 20dB when off-air
       else if (state.afv) {
-        const isOnProgram = (nodeId === this.currentProgramCameraId);
+        const isOnProgram = !this.currentProgramCameraId || (nodeId === this.currentProgramCameraId) || this.channelStates.size <= 1;
         if (!isOnProgram) {
           effectiveGain = effectiveGain * 0.05; // ducked background bleed
         }
@@ -554,6 +578,103 @@ class AudioMixerService {
       this.masterGainNode.gain.cancelScheduledValues(now);
       this.masterGainNode.gain.linearRampToValueAtTime(Math.max(0, effectiveMaster), now + 0.03);
     }
+  }
+
+  public getMixdownStream(): MediaStream | null {
+    return this.destinationNode ? this.destinationNode.stream : null;
+  }
+
+  public getChannelStream(nodeId: string): MediaStream | null {
+    const dsp = this.channels.get(nodeId);
+    if (dsp?.channelDestination) return dsp.channelDestination.stream;
+    if (dsp?.stream) return dsp.stream;
+    return null;
+  }
+
+  /**
+   * Ingests real-time raw PCM microphone audio packets sent over WebSocket fallback.
+   * Feeds directly into channel strip DSP & produces a live MediaStream.
+   */
+  public ingestPcmChunk(nodeId: string, base64Pcm: string, sampleRate: number = 16000, peak: number = 0): MediaStream | null {
+    this.init();
+    if (!this.ctx) return null;
+
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+
+    if (!this.channels.has(nodeId)) {
+      this.registerCameraNode(nodeId, 'Remote Phone Cam', 'custom', null);
+    }
+
+    const dsp = this.channels.get(nodeId);
+    if (!dsp) return null;
+
+    // Disconnect simulated ambience if real mic data is streaming
+    if (dsp.synthSourceNode) {
+      try {
+        (dsp.synthSourceNode as any).stop?.();
+        dsp.synthSourceNode.disconnect();
+      } catch (e) {}
+      dsp.synthSourceNode = null;
+    }
+
+    // Ensure isolated channel destination stream is available
+    if (!dsp.channelDestination) {
+      dsp.channelDestination = this.ctx.createMediaStreamDestination();
+      dsp.gainNode.connect(dsp.channelDestination);
+    }
+
+    const channelState = this.channelStates.get(nodeId);
+    if (channelState) {
+      channelState.isAudioPresent = true;
+      if (peak > 0) {
+        channelState.meterL = peak;
+        channelState.meterR = peak;
+        channelState.peakL = Math.max(channelState.peakL, peak);
+        channelState.peakR = Math.max(channelState.peakR, peak);
+      }
+    }
+
+    if (!base64Pcm || base64Pcm.trim() === '') {
+      return dsp.channelDestination ? dsp.channelDestination.stream : dsp.stream;
+    }
+
+    try {
+      // Decode Base64 to 16-bit PCM Int16Array
+      const binary = atob(base64Pcm);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const int16Array = new Int16Array(bytes.buffer);
+      if (int16Array.length === 0) return dsp.channelDestination.stream;
+
+      const floatSamples = new Float32Array(int16Array.length);
+      for (let i = 0; i < int16Array.length; i++) {
+        floatSamples[i] = int16Array[i] / 32768.0;
+      }
+
+      const rate = sampleRate || 16000;
+      const buffer = this.ctx.createBuffer(1, floatSamples.length, rate);
+      buffer.copyToChannel(floatSamples, 0);
+
+      const bufferSource = this.ctx.createBufferSource();
+      bufferSource.buffer = buffer;
+      bufferSource.connect(dsp.eqLow);
+
+      const now = this.ctx.currentTime;
+      if (!dsp.nextPlayTime || dsp.nextPlayTime < now) {
+        dsp.nextPlayTime = now + 0.025; // 25ms jitter buffer
+      }
+      bufferSource.start(dsp.nextPlayTime);
+      dsp.nextPlayTime += buffer.duration;
+      dsp.lastPcmTime = Date.now();
+    } catch (e) {
+      console.warn('[AudioMixer] Error ingesting PCM chunk:', e);
+    }
+
+    return dsp.channelDestination.stream;
   }
 
   public getChannelState(nodeId: string): ChannelAudioState | undefined {

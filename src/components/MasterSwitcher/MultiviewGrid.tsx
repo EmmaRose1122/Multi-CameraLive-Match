@@ -366,8 +366,11 @@ export const MultiviewGrid: React.FC<MultiviewGridProps> = ({
                          {((cameraStats[cam.id]?.bytesReceived || 0) / 1024).toFixed(1)} KB
                        </span>
                      </div>
-                     {cam.fallbackFrame && !cam.stream && (
-                        <div className="text-red-400 font-bold text-[9px] mt-0.5 border-t border-white/10 pt-0.5">MJPEG FALLBACK</div>
+                     {cam.fallbackFrame && (
+                        <div className="text-emerald-400 font-bold text-[9px] mt-0.5 border-t border-white/10 pt-0.5 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                          <span>MIC & VIDEO LIVE</span>
+                        </div>
                      )}
                    </div>
                 )}

@@ -27,16 +27,21 @@ export class WebRTCService {
 
   // ICE Servers (Local STUN / Direct LAN)
 
-  // Fallback MJPEG over WebSocket
+  // Fallback MJPEG & Audio over WebSocket
   private useFallbackTransmission = false;
   private hiddenCanvas: HTMLCanvasElement | null = null;
   private transmissionInterval: any = null;
   private onRemoteFrameCallbacks = new Map<string, (nodeId: string, frameDataUrl: string) => void>();
+  private onRemoteAudioChunkCallbacks = new Map<string, (nodeId: string, pcmData: string, sampleRate: number, peak: number) => void>();
 
   private rtcConfig: RTCConfiguration = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
     ],
   };
 
@@ -142,6 +147,11 @@ export class WebRTCService {
             case 'frame-sync':
         const globalCb = this.onRemoteFrameCallbacks.get('global');
         if (globalCb) globalCb(msg.senderId, msg.frameDataUrl);
+        break;
+
+      case 'audio-chunk':
+        const globalAudioCb = this.onRemoteAudioChunkCallbacks.get('global');
+        if (globalAudioCb) globalAudioCb(msg.senderId, msg.pcmData, msg.sampleRate || 16000, msg.peak || 0);
         break;
 
       case 'scoreboard-sync':
@@ -254,16 +264,65 @@ export class WebRTCService {
   public setLocalStream(stream: MediaStream) {
     this.localStream = stream;
     
-    // Start fallback transmission if on a mobile node
+    // Ensure all audio tracks are unmuted and enabled
+    stream.getAudioTracks().forEach(t => {
+      t.enabled = true;
+    });
+
     // Add or replace tracks for any existing peer connections
     this.peerConnections.forEach((pc) => {
+      const transceivers = pc.getTransceivers ? pc.getTransceivers() : [];
+      const videoTrack = stream.getVideoTracks()[0];
+      const audioTrack = stream.getAudioTracks()[0];
+
+      let videoReplaced = false;
+      let audioReplaced = false;
+
+      // First pass: replace track on matching transceivers
+      transceivers.forEach((t) => {
+        const kind = t.receiver?.track?.kind || t.sender?.track?.kind;
+        if (kind === 'video' && videoTrack) {
+          try {
+            t.direction = 'sendonly';
+            t.sender.replaceTrack(videoTrack).catch(() => {});
+            videoReplaced = true;
+          } catch (e) {}
+        } else if (kind === 'audio' && audioTrack) {
+          try {
+            t.direction = 'sendonly';
+            t.sender.replaceTrack(audioTrack).catch(() => {});
+            audioReplaced = true;
+          } catch (e) {}
+        }
+      });
+
+      // Second pass: check senders
       const senders = pc.getSenders();
+      senders.forEach((s) => {
+        if (s.track && s.track.kind === 'video' && videoTrack) {
+          s.replaceTrack(videoTrack).catch(() => {});
+          videoReplaced = true;
+        } else if (s.track && s.track.kind === 'audio' && audioTrack) {
+          s.replaceTrack(audioTrack).catch(() => {});
+          audioReplaced = true;
+        } else if (!s.track) {
+          if (audioTrack && !audioReplaced) {
+            s.replaceTrack(audioTrack).catch(() => {});
+            audioReplaced = true;
+          } else if (videoTrack && !videoReplaced) {
+            s.replaceTrack(videoTrack).catch(() => {});
+            videoReplaced = true;
+          }
+        }
+      });
+
+      // Third pass: add any missing tracks if not yet in senders
       stream.getTracks().forEach((track) => {
-        const sender = senders.find(s => s.track && s.track.kind === track.kind);
-        if (sender) {
-          sender.replaceTrack(track);
-        } else {
-          pc.addTrack(track, stream);
+        const hasSender = senders.some((s) => s.track === track || (s.track && s.track.id === track.id));
+        if (!hasSender) {
+          try {
+            pc.addTrack(track, stream);
+          } catch (e) {}
         }
       });
     });
@@ -300,6 +359,16 @@ export class WebRTCService {
     this.send({
       type: 'frame-sync',
       frameDataUrl,
+    });
+  }
+
+  public sendAudioChunk(pcmData: string, sampleRate: number, peak: number) {
+    this.send({
+      type: 'audio-chunk',
+      pcmData,
+      sampleRate,
+      peak,
+      timestamp: Date.now(),
     });
   }
 
@@ -348,13 +417,18 @@ export class WebRTCService {
     };
 
     pc.ontrack = (event) => {
-      console.log('[WebRTC] ontrack received on switcher for node:', nodeId, event.track.kind, event.streams);
+      console.log('[WebRTC] ontrack received on switcher for node:', nodeId, event.track.kind, event.track.id);
       let stream = this.remoteStreams.get(nodeId);
       if (!stream) {
         stream = new MediaStream();
         this.remoteStreams.set(nodeId, stream);
       }
       
+      // Ensure audio track is enabled
+      if (event.track.kind === 'audio') {
+        event.track.enabled = true;
+      }
+
       // Remove any existing track of the same kind if obsolete
       const existingTrack = stream.getTracks().find(t => t.kind === event.track.kind);
       if (existingTrack && existingTrack.id !== event.track.id) {
@@ -364,12 +438,17 @@ export class WebRTCService {
         stream.addTrack(event.track);
       }
       
-      event.track.onunmute = () => {
-        console.log(`[WebRTC] Track unmuted for ${nodeId} (${event.track.kind})`);
-        onRemoteStream(stream!);
+      const notifyStream = () => {
+        const streamClone = new MediaStream(stream!.getTracks());
+        onRemoteStream(streamClone);
       };
 
-      onRemoteStream(stream);
+      event.track.onunmute = () => {
+        console.log(`[WebRTC] Track unmuted for ${nodeId} (${event.track.kind})`);
+        notifyStream();
+      };
+
+      notifyStream();
     };
 
     pc.createOffer({
@@ -400,10 +479,6 @@ export class WebRTCService {
       this.peerConnections.set(senderId, pc);
     }
 
-    if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => pc.addTrack(track, this.localStream!));
-    }
-
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         this.send({
@@ -425,6 +500,39 @@ export class WebRTCService {
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+      // Bind local video & audio tracks into transceivers created by the remote offer
+      if (this.localStream) {
+        const transceivers = pc.getTransceivers ? pc.getTransceivers() : [];
+        const videoTrack = this.localStream.getVideoTracks()[0];
+        const audioTrack = this.localStream.getAudioTracks()[0];
+
+        let videoAssigned = false;
+        let audioAssigned = false;
+
+        transceivers.forEach((t) => {
+          const kind = t.receiver?.track?.kind || t.sender?.track?.kind;
+          if (kind === 'video' && videoTrack) {
+            t.direction = 'sendonly';
+            t.sender.replaceTrack(videoTrack).catch(() => {});
+            videoAssigned = true;
+          } else if (kind === 'audio' && audioTrack) {
+            t.direction = 'sendonly';
+            t.sender.replaceTrack(audioTrack).catch(() => {});
+            audioAssigned = true;
+          }
+        });
+
+        // Add any tracks not handled by transceivers
+        this.localStream.getTracks().forEach((track) => {
+          if ((track.kind === 'video' && !videoAssigned) || (track.kind === 'audio' && !audioAssigned)) {
+            try {
+              pc.addTrack(track, this.localStream!);
+            } catch (e) {}
+          }
+        });
+      }
+
       if (this.iceCandidateQueues.has(senderId)) {
         const queue = this.iceCandidateQueues.get(senderId) || [];
         this.iceCandidateQueues.delete(senderId);
@@ -528,6 +636,10 @@ export class WebRTCService {
 
   public onRemoteFrame(cb: (nodeId: string, frameDataUrl: string) => void) {
     this.onRemoteFrameCallbacks.set('global', cb);
+  }
+
+  public onRemoteAudioChunk(cb: (nodeId: string, pcmData: string, sampleRate: number, peak: number) => void) {
+    this.onRemoteAudioChunkCallbacks.set('global', cb);
   }
 
   public onScoreboardSync(cb: (scoreboard: any) => void) {

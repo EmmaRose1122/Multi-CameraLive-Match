@@ -17,9 +17,12 @@ import {
   Activity,
   Layers,
   Wand2,
+  BarChart3,
+  AlignJustify,
 } from 'lucide-react';
 import { CameraNode, SwitcherState, ChannelAudioState, MasterAudioState } from '../../types/broadcast';
 import { audioMixerService, dbToLinear, linearToDb } from '../../services/audioMixerService';
+import { DynamicVuMeter, VuMeterDisplayMode } from './DynamicVuMeter';
 
 interface AudioMixingPanelProps {
   cameras: CameraNode[];
@@ -38,6 +41,7 @@ export const AudioMixingPanel: React.FC<AudioMixingPanelProps> = ({
   const [master, setMaster] = useState<MasterAudioState>(audioMixerService.getMasterState());
   const [activeEqNodeId, setActiveEqNodeId] = useState<string | null>(null);
   const [showAdvancedMaster, setShowAdvancedMaster] = useState(false);
+  const [vuMode, setVuMode] = useState<VuMeterDisplayMode>('ladder');
 
   // Sync cameras into audioMixerService
   useEffect(() => {
@@ -113,13 +117,41 @@ export const AudioMixingPanel: React.FC<AudioMixingPanelProps> = ({
               </span>
             </div>
             <p className="text-[10px] text-white/50">
-              Individual channel faders, 3-band EQ, AFV tracking & Master Limiter
+              Real-time dynamic VU metering (Green/Yellow/Red), individual channel faders & clipping alarms
             </p>
           </div>
         </div>
 
-        {/* Quick Presets & Utility Buttons */}
+        {/* Quick Presets, Meter Style & Utility Buttons */}
         <div className="flex items-center gap-2">
+          {/* VU Meter Display Mode Switcher */}
+          <div className="flex items-center bg-black/40 p-0.5 rounded-lg border border-white/10 text-[9px] font-mono">
+            <button
+              onClick={() => setVuMode('ladder')}
+              className={`px-2 py-1 rounded flex items-center gap-1 transition ${
+                vuMode === 'ladder'
+                  ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                  : 'text-white/50 hover:text-white'
+              }`}
+              title="Segmented LED Ladder Display"
+            >
+              <AlignJustify className="w-3 h-3" />
+              <span className="hidden sm:inline">LED Ladder</span>
+            </button>
+            <button
+              onClick={() => setVuMode('gradient')}
+              className={`px-2 py-1 rounded flex items-center gap-1 transition ${
+                vuMode === 'gradient'
+                  ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                  : 'text-white/50 hover:text-white'
+              }`}
+              title="Smooth Dynamic Gradient Bar Display"
+            >
+              <BarChart3 className="w-3 h-3" />
+              <span className="hidden sm:inline">Gradient</span>
+            </button>
+          </div>
+
           <button
             onClick={handlePresetResetUnity}
             className="flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 transition-colors"
@@ -158,6 +190,37 @@ export const AudioMixingPanel: React.FC<AudioMixingPanelProps> = ({
         </div>
       </div>
 
+      {/* Collapsed Compact View: Real-time Horizontal Dynamic VU Meter Bay for all streams */}
+      {isCompact && (
+        <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 bg-black/40">
+          {channels.map((chan) => {
+            const isPgm = chan.nodeId === switcherState.programCameraId;
+            return (
+              <div
+                key={chan.nodeId}
+                className={`p-2 rounded-lg border flex flex-col gap-1 ${
+                  isPgm
+                    ? 'bg-red-950/20 border-red-500/40'
+                    : 'bg-slate-900/60 border-white/5'
+                }`}
+              >
+                <DynamicVuMeter
+                  levelL={chan.meterL}
+                  levelR={chan.meterR}
+                  peakL={chan.peakL}
+                  peakR={chan.peakR}
+                  isClipping={chan.isClipping}
+                  muted={chan.muted}
+                  orientation="horizontal"
+                  channelName={chan.name}
+                  showNumericDb={true}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {!isCompact && (
         <div className="p-3 sm:p-4 flex flex-col gap-4">
           {/* Main Fader Channel Strip Bay */}
@@ -170,7 +233,7 @@ export const AudioMixingPanel: React.FC<AudioMixingPanelProps> = ({
               return (
                 <div
                   key={chan.nodeId}
-                  className={`w-[130px] sm:w-[140px] flex-shrink-0 rounded-xl p-2.5 border flex flex-col justify-between transition-all relative ${
+                  className={`w-[136px] sm:w-[144px] flex-shrink-0 rounded-xl p-2.5 border flex flex-col justify-between transition-all relative ${
                     isPgm
                       ? 'bg-red-950/20 border-red-500/50 shadow-lg shadow-red-950/40'
                       : isPvw
@@ -337,10 +400,10 @@ export const AudioMixingPanel: React.FC<AudioMixingPanelProps> = ({
                     )}
                   </div>
 
-                  {/* Fader & Dual Stereo Meter Section */}
-                  <div className="flex items-center justify-between gap-2 h-44 bg-black/50 p-2 rounded-xl border border-white/5 relative">
+                  {/* Fader & Dynamic VU Meter Section */}
+                  <div className="flex items-stretch justify-between gap-1.5 h-44 bg-black/60 p-2 rounded-xl border border-white/5 relative">
                     {/* dB Scale Markings */}
-                    <div className="flex flex-col justify-between h-full text-[8px] font-mono text-white/30 py-1">
+                    <div className="flex flex-col justify-between h-full text-[8px] font-mono text-white/30 py-1 select-none">
                       <span>+10</span>
                       <span className="text-white/60 font-bold">0</span>
                       <span>-6</span>
@@ -351,7 +414,7 @@ export const AudioMixingPanel: React.FC<AudioMixingPanelProps> = ({
                     </div>
 
                     {/* Vertical Gain Fader */}
-                    <div className="h-full flex items-center justify-center relative w-7">
+                    <div className="h-full flex items-center justify-center relative w-6">
                       {/* Fader track line */}
                       <div className="absolute inset-y-2 w-1.5 bg-slate-800 rounded-full border border-white/10 pointer-events-none" />
                       <input
@@ -377,58 +440,21 @@ export const AudioMixingPanel: React.FC<AudioMixingPanelProps> = ({
                       />
                     </div>
 
-                    {/* Dual Stereo LED Meter Bars */}
-                    <div className="flex gap-1 h-full w-5 bg-black rounded p-0.5 border border-white/10 relative overflow-hidden">
-                      {/* Left Channel Meter */}
-                      <div className="flex-1 bg-slate-900 rounded-xs relative overflow-hidden flex flex-col-reverse">
-                        <div
-                          className="w-full transition-all duration-75"
-                          style={{
-                            height: `${Math.min(100, Math.max(0, chan.meterL * 180))}%`,
-                            background:
-                              chan.meterL > 0.8
-                                ? '#ef4444'
-                                : chan.meterL > 0.6
-                                ? '#eab308'
-                                : '#22c55e',
-                          }}
-                        />
-                        {/* Peak hold marker */}
-                        <div
-                          className="absolute w-full h-0.5 bg-white shadow-xs pointer-events-none transition-all duration-150"
-                          style={{
-                            bottom: `${Math.min(100, Math.max(0, chan.peakL * 180))}%`,
-                          }}
-                        />
-                      </div>
-
-                      {/* Right Channel Meter */}
-                      <div className="flex-1 bg-slate-900 rounded-xs relative overflow-hidden flex flex-col-reverse">
-                        <div
-                          className="w-full transition-all duration-75"
-                          style={{
-                            height: `${Math.min(100, Math.max(0, chan.meterR * 180))}%`,
-                            background:
-                              chan.meterR > 0.8
-                                ? '#ef4444'
-                                : chan.meterR > 0.6
-                                ? '#eab308'
-                                : '#22c55e',
-                          }}
-                        />
-                        {/* Peak hold marker */}
-                        <div
-                          className="absolute w-full h-0.5 bg-white shadow-xs pointer-events-none transition-all duration-150"
-                          style={{
-                            bottom: `${Math.min(100, Math.max(0, chan.peakR * 180))}%`,
-                          }}
-                        />
-                      </div>
-
-                      {/* Clip LED indicator */}
-                      {chan.isClipping && (
-                        <div className="absolute top-0.5 inset-x-0.5 h-1 bg-red-600 animate-ping rounded" />
-                      )}
+                    {/* Dynamic CSS-based Stereo VU Meter with Green->Yellow->Red Clipping Monitoring */}
+                    <div className="h-full w-7 flex-shrink-0">
+                      <DynamicVuMeter
+                        levelL={chan.meterL}
+                        levelR={chan.meterR}
+                        peakL={chan.peakL}
+                        peakR={chan.peakR}
+                        isClipping={chan.isClipping}
+                        muted={chan.muted}
+                        orientation="vertical"
+                        meterMode={vuMode}
+                        showNumericDb={false}
+                        segmentsCount={18}
+                        className="w-full h-full"
+                      />
                     </div>
                   </div>
 
@@ -468,7 +494,7 @@ export const AudioMixingPanel: React.FC<AudioMixingPanelProps> = ({
             })}
 
             {/* MASTER BROADCAST OUTPUT CHANNEL STRIP */}
-            <div className="w-[150px] sm:w-[160px] flex-shrink-0 rounded-xl p-2.5 border border-amber-500/40 bg-gradient-to-b from-amber-950/20 via-slate-900/80 to-black flex flex-col justify-between shadow-2xl shadow-amber-950/30">
+            <div className="w-[154px] sm:w-[164px] flex-shrink-0 rounded-xl p-2.5 border border-amber-500/40 bg-gradient-to-b from-amber-950/20 via-slate-900/80 to-black flex flex-col justify-between shadow-2xl shadow-amber-950/30">
               {/* Master Header */}
               <div className="flex flex-col gap-1 pb-2 border-b border-amber-500/30">
                 <div className="flex items-center justify-between">
@@ -546,10 +572,10 @@ export const AudioMixingPanel: React.FC<AudioMixingPanelProps> = ({
                 </div>
               </div>
 
-              {/* Master Fader & Master VU Meter */}
-              <div className="flex items-center justify-between gap-2 h-44 bg-black/60 p-2 rounded-xl border border-amber-500/20 relative">
+              {/* Master Fader & Master Dynamic VU Meter */}
+              <div className="flex items-stretch justify-between gap-1.5 h-44 bg-black/60 p-2 rounded-xl border border-amber-500/20 relative">
                 {/* dB Scale Markings */}
-                <div className="flex flex-col justify-between h-full text-[8px] font-mono text-amber-200/40 py-1">
+                <div className="flex flex-col justify-between h-full text-[8px] font-mono text-amber-200/40 py-1 select-none">
                   <span>+10</span>
                   <span className="text-amber-400 font-bold">0</span>
                   <span>-6</span>
@@ -560,7 +586,7 @@ export const AudioMixingPanel: React.FC<AudioMixingPanelProps> = ({
                 </div>
 
                 {/* Vertical Master Gain Fader */}
-                <div className="h-full flex items-center justify-center relative w-7">
+                <div className="h-full flex items-center justify-center relative w-6">
                   <div className="absolute inset-y-2 w-1.5 bg-amber-950/80 rounded-full border border-amber-500/30 pointer-events-none" />
                   <input
                     type="range"
@@ -585,53 +611,21 @@ export const AudioMixingPanel: React.FC<AudioMixingPanelProps> = ({
                   />
                 </div>
 
-                {/* Master Stereo VU Meter */}
-                <div className="flex gap-1 h-full w-6 bg-black rounded p-0.5 border border-amber-500/30 relative overflow-hidden">
-                  <div className="flex-1 bg-slate-900 rounded-xs relative overflow-hidden flex flex-col-reverse">
-                    <div
-                      className="w-full transition-all duration-75"
-                      style={{
-                        height: `${Math.min(100, Math.max(0, master.meterL * 180))}%`,
-                        background:
-                          master.meterL > 0.85
-                            ? '#ef4444'
-                            : master.meterL > 0.65
-                            ? '#eab308'
-                            : '#22c55e',
-                      }}
-                    />
-                    <div
-                      className="absolute w-full h-0.5 bg-amber-200 shadow-xs pointer-events-none transition-all duration-150"
-                      style={{
-                        bottom: `${Math.min(100, Math.max(0, master.peakL * 180))}%`,
-                      }}
-                    />
-                  </div>
-
-                  <div className="flex-1 bg-slate-900 rounded-xs relative overflow-hidden flex flex-col-reverse">
-                    <div
-                      className="w-full transition-all duration-75"
-                      style={{
-                        height: `${Math.min(100, Math.max(0, master.meterR * 180))}%`,
-                        background:
-                          master.meterR > 0.85
-                            ? '#ef4444'
-                            : master.meterR > 0.65
-                            ? '#eab308'
-                            : '#22c55e',
-                      }}
-                    />
-                    <div
-                      className="absolute w-full h-0.5 bg-amber-200 shadow-xs pointer-events-none transition-all duration-150"
-                      style={{
-                        bottom: `${Math.min(100, Math.max(0, master.peakR * 180))}%`,
-                      }}
-                    />
-                  </div>
-
-                  {master.isClipping && (
-                    <div className="absolute top-0.5 inset-x-0.5 h-1 bg-red-600 animate-ping rounded" />
-                  )}
+                {/* Master Stereo Dynamic VU Meter */}
+                <div className="h-full w-8 flex-shrink-0">
+                  <DynamicVuMeter
+                    levelL={master.meterL}
+                    levelR={master.meterR}
+                    peakL={master.peakL}
+                    peakR={master.peakR}
+                    isClipping={master.isClipping}
+                    muted={master.masterMuted}
+                    orientation="vertical"
+                    meterMode={vuMode}
+                    showNumericDb={false}
+                    segmentsCount={18}
+                    className="w-full h-full"
+                  />
                 </div>
               </div>
 
